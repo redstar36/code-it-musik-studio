@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Code it! Musik Studio</title>
+  <link rel="stylesheet" href="css/style.css?v=8d8df3a">
+</head>
+<body>
+  <header>
+    <h1>Code it! Musik Studio</h1>
+    <div class="transport">
+      <button id="play-btn">&#9654; Play</button>
+      <div class="modus" role="group" aria-label="Modus">
+        <button id="modus-live" class="gewaehlt">Live</button>
+        <button id="modus-song">Song</button>
+      </div>
+      <button id="export-btn" title="Berechnet deinen Ablauf und speichert ihn als Audiodatei">&#11015; Song als WAV</button>
+      <span id="tempo-display">120 BPM</span>
+      <span id="tonart-display">c-dur</span>
+      <span id="position-display">Takt 1 · Schritt 1</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="editor-panel">
+      <div class="editor">
+        <div id="zeilennummern" aria-hidden="true"></div>
+        <textarea id="code-editor" spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off"></textarea>
+      </div>
+      <div class="editor-leiste">
+        <button id="ausfuehren-btn" title="Strg + Enter">Ausführen <kbd>Strg</kbd>+<kbd>Enter</kbd></button>
+        <div class="datei-knoepfe">
+          <button id="speichern-btn" title="Speichert deinen Code als Textdatei im Download-Ordner">Code speichern</button>
+          <button id="oeffnen-btn" title="Öffnet eine Textdatei, die du vorher gespeichert hast">Code öffnen</button>
+          <button id="link-btn" title="Kopiert einen Link, der genau diesen Code öffnet">Link kopieren</button>
+          <button id="demo-btn" title="Holt den Demo-Track zurück">Demo laden</button>
+          <input type="file" id="datei-auswahl" accept=".txt,.py,text/plain" hidden>
+        </div>
+      </div>
+      <div id="meldung" role="status"></div>
+    </section>
+    <section class="grid-panel">
+      <h2>Spuren <span class="tasten-hinweis">Tasten 1–8</span></h2>
+      <div id="spur-felder" class="felder spuren"></div>
+      <h2>Szenen <span class="tasten-hinweis">Tasten Q W E R T</span></h2>
+      <div id="szenen-felder" class="felder szenen"></div>
+      <h2>Ablauf <span class="tasten-hinweis">Song-Modus, jede Szene 4 Takte</span></h2>
+      <div id="ablauf-anzeige" class="ablauf"></div>
+      <p id="tasten-status"></p>
+    </section>
+  </main>
+
+  <script type="module" src="js/app.js?v=8d8df3a"></script>
+</body>
+</html>
