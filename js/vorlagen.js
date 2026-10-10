@@ -68,6 +68,105 @@ const LEKTION_1_SZENE = DEMO_TRACK
   .replace('szene("r", 3, 5)             # Pause zum Luftholen\n',
            'szene("r", 3, 5)             # Pause zum Luftholen\nszene("t", 1, 4)             # deine Szene\n');
 
+// ─── Lektion 2 „Bau deinen Beat“ (noch ohne Variablen) ───
+
+const LEKTION_2_SCHRITT_1 = `# Mein Beat
+
+tempo(120)
+
+spur(1, beat("x... x... x... x...", klang="kick"))
+`;
+
+const LEKTION_2_SCHRITT_2 = `# Mein Beat
+
+tempo(120)
+
+spur(1, beat("x... .... x... ....", klang="kick"))
+`;
+
+const LEKTION_2_SCHRITT_3 = `# Mein Beat
+
+tempo(120)
+
+spur(1, beat("x... .... x... ....", klang="kick"))
+spur(2, beat(".... x... .... x...", klang="snare"))
+`;
+
+const LEKTION_2_SCHRITT_4 = `# Mein Beat
+
+tempo(120)
+
+spur(1, beat("x... .... x... ....", klang="kick"))
+spur(2, beat(".... x... .... x...", klang="snare"))
+spur(3, beat("x.x. x.x. x.x. x.x.", klang="hihat"))
+`;
+
+/** Schritt 5: Spur 1 steht absichtlich zweimal – die untere Zeile gewinnt */
+const LEKTION_2_SCHRITT_5 = `# Mein Beat
+
+tempo(120)
+
+spur(1, beat("x... .... x... ....", klang="kick"))
+spur(2, beat(".... x... .... x...", klang="snare"))
+spur(3, beat("x.x. x.x. x.x. x.x.", klang="hihat"))
+spur(1, beat("x... x... x... x...", klang="kick"))
+`;
+
+const LEKTION_2_SCHRITT_6 = `# Mein eigener Beat
+
+tempo(120)
+
+# Kick
+spur(1, beat(".... .... .... ....", klang="kick"))
+# Snare
+spur(2, beat(".... .... .... ....", klang="snare"))
+# Hi-Hat
+spur(3, beat(".... .... .... ....", klang="hihat"))
+`;
+
+// ─── Lektion 3 „Der Bass bringt den Groove“ (Variablen, Tonart) ───
+
+/** Schritt 1: der Beat noch ohne Namen – die Kinder schreiben ihn mit Variablen um */
+const LEKTION_3_SCHRITT_1 = `# Mein Groove
+
+tempo(100)
+
+spur(1, beat("x... .... x.x. ....", klang="kick"))
+spur(2, beat(".... x... .... x...", klang="snare"))
+spur(3, beat("x.x. x.x. x.x. x.x.", klang="hihat"))
+`;
+
+const LEKTION_3_SCHRITT_2 = `# Die Tonleiter
+
+tempo(100)
+tonart("c-dur")
+
+leiter = melodie("1--- 2--- 3--- 4--- 5--- 6--- 7--- 8---", klang="marimba")
+
+spur(1, leiter)
+`;
+
+const LEKTION_3_GROOVE = `# Mein Groove
+
+tempo(100)
+tonart("a-moll")
+
+kick  = beat("x... .... x.x. ....", klang="kick")
+snare = beat(".... x... .... x...", klang="snare")
+hihat = beat("x.x. x.x. x.x. x.x.", klang="hihat")
+bass  = melodie("1--- . 1-- 3-- 1- . 5-", klang="synbass", oktave=2)
+
+spur(1, kick)
+spur(2, snare)
+spur(3, hihat)
+spur(4, bass)
+`;
+
+/** Schritt 6: zusätzlich eine Glocken-Melodie, damit man hört, dass die Tonart überall wirkt */
+const LEKTION_3_SCHRITT_6 = LEKTION_3_GROOVE
+  .replace('bass  = melodie(', 'glitzer = melodie("8-.. 5-.. 3-.. 5-..", klang="glocke")\nbass  = melodie(')
+  .replace('spur(4, bass)\n', 'spur(4, bass)\nspur(5, glitzer, lautstaerke=60)\n');
+
 const LEER = `# Mein Song
 
 tempo(120)
@@ -87,5 +186,17 @@ export const VORLAGEN = {
   'lektion-1-schritt-5': { titel: 'Lektion 1, Schritt 5', code: LEKTION_1_SZENE },
   'lektion-1-schritt-6': { titel: 'Lektion 1, Schritt 6', code: DEMO_TRACK },
   'lektion-2': { titel: 'die Vorlage für Lektion 2', code: LEKTION_2 },
+  'lektion-2-schritt-1': { titel: 'Lektion 2, Schritt 1', code: LEKTION_2_SCHRITT_1 },
+  'lektion-2-schritt-2': { titel: 'Lektion 2, Schritt 2', code: LEKTION_2_SCHRITT_2 },
+  'lektion-2-schritt-3': { titel: 'Lektion 2, Schritt 3', code: LEKTION_2_SCHRITT_3 },
+  'lektion-2-schritt-4': { titel: 'Lektion 2, Schritt 4', code: LEKTION_2_SCHRITT_4 },
+  'lektion-2-schritt-5': { titel: 'Lektion 2, Schritt 5', code: LEKTION_2_SCHRITT_5 },
+  'lektion-2-schritt-6': { titel: 'Lektion 2, Schritt 6', code: LEKTION_2_SCHRITT_6 },
+  'lektion-3-schritt-1': { titel: 'Lektion 3, Schritt 1', code: LEKTION_3_SCHRITT_1 },
+  'lektion-3-schritt-2': { titel: 'Lektion 3, Schritt 2', code: LEKTION_3_SCHRITT_2 },
+  'lektion-3-schritt-3': { titel: 'Lektion 3, Schritt 3', code: LEKTION_3_GROOVE },
+  'lektion-3-schritt-4': { titel: 'Lektion 3, Schritt 4', code: LEKTION_3_GROOVE },
+  'lektion-3-schritt-5': { titel: 'Lektion 3, Schritt 5', code: LEKTION_3_GROOVE },
+  'lektion-3-schritt-6': { titel: 'Lektion 3, Schritt 6', code: LEKTION_3_SCHRITT_6 },
   'leer':      { titel: 'eine leere Vorlage', code: LEER },
 };

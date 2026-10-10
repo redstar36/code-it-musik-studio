@@ -1,12 +1,13 @@
 // app.js – UI-Logik: Code ausführen, Play/Stop, Meldungen, Live-Steuerung
 
-import { AudioEngine, TAKTE_PRO_TEIL } from './audio-engine.js?v=8d8df3a';
-import { programmAusfuehren, SZENEN_TASTEN } from './befehle.js?v=8d8df3a';
-import { CodeFehler } from './interpreter.js?v=8d8df3a';
-import { DEMO_TRACK } from './vorlagen.js?v=8d8df3a';
-import { songBerechnen, wavErzeugen, dateiname, herunterladen } from './export.js?v=8d8df3a';
-import { codeLaden, codeMerken, codeAlsDatei, dateiLesen } from './speicher.js?v=8d8df3a';
-import { linkAuslesen, linkEntfernen, linkFuerCode } from './links.js?v=8d8df3a';
+import { AudioEngine, TAKTE_PRO_TEIL } from './audio-engine.js?v=880257c';
+import { programmAusfuehren, liveBefehle, SZENEN_TASTEN, ERSTER_TAKT } from './befehle.js?v=880257c';
+import { CodeFehler } from './interpreter.js?v=880257c';
+import { DEMO_TRACK } from './vorlagen.js?v=880257c';
+import { songBerechnen, takteBerechnen, wavErzeugen, dateiname, herunterladen } from './export.js?v=880257c';
+import { codeLaden, codeMerken, codeAlsDatei, dateiLesen } from './speicher.js?v=880257c';
+import { linkAuslesen, linkEntfernen, linkFuerCode, stufeAuslesen } from './links.js?v=880257c';
+import { rasterEinrichten } from './raster.js?v=880257c';
 
 const engine = new AudioEngine();
 
@@ -25,6 +26,7 @@ const tastenStatus = document.getElementById('tasten-status');
 const ablaufAnzeige = document.getElementById('ablauf-anzeige');
 const modusLiveBtn = document.getElementById('modus-live');
 const modusSongBtn = document.getElementById('modus-song');
+let raster = null;  // Beat-Raster unter dem Textfeld (ab Stufe 2), siehe unten
 
 // ─── Start-Code bestimmen ────────────────────────────────
 // Reihenfolge: Code aus dem Link (Vorlage) → Code vom letzten Mal → Demo-Track
@@ -32,6 +34,12 @@ const modusSongBtn = document.getElementById('modus-song');
 const gemerkterCode = codeLaden();
 let startCode = gemerkterCode ?? DEMO_TRACK;
 let startMeldung = gemerkterCode !== null ? ['Dein Code vom letzten Mal ist wieder da.', 'hinweis'] : ['', ''];
+
+// Stufe (KONZEPT.md 3.7): Elemente mit data-ab="N" erscheinen erst ab Lektion N
+const stufe = stufeAuslesen();
+for (const element of document.querySelectorAll('[data-ab]')) {
+  if (Number(element.dataset.ab) > stufe) element.classList.add('stufe-aus');
+}
 
 const ausLink = linkAuslesen();
 if (ausLink) {
@@ -72,6 +80,50 @@ function zeilennummernZeichnen() {
 }
 
 editor.addEventListener('input', zeilennummernZeichnen);
+
+// ─── Einrücken im Textfeld (für Schleifen) ───────────────
+
+const EINRUECKUNG = '    '; // 4 Leerzeichen, wie in Python üblich
+
+/** Text an der Cursorposition einfügen, so dass Rückgängig (Strg+Z) weiter funktioniert */
+function textEinfuegen(text) {
+  if (!document.execCommand('insertText', false, text)) {
+    editor.setRangeText(text, editor.selectionStart, editor.selectionEnd, 'end');
+    editor.dispatchEvent(new Event('input'));
+  }
+}
+
+/** Tab: einrücken, Shift+Tab: ausrücken – für die aktuelle Zeile oder alle markierten Zeilen */
+function einruecken(aus) {
+  const text = editor.value;
+  const start = editor.selectionStart;
+  const ende = editor.selectionEnd;
+  const mehrereZeilen = text.slice(start, ende).includes('\n');
+
+  if (!aus && !mehrereZeilen) {
+    textEinfuegen(EINRUECKUNG);
+    return;
+  }
+  // Ganze Zeilen markieren und jede Zeile ein- oder ausrücken
+  const zeilenStart = text.lastIndexOf('\n', start - 1) + 1;
+  let zeilenEnde = text.indexOf('\n', ende - (ende > start && text[ende - 1] === '\n' ? 1 : 0));
+  if (zeilenEnde === -1) zeilenEnde = text.length;
+  const zeilen = text.slice(zeilenStart, zeilenEnde).split('\n');
+  const neu = zeilen.map((z) => aus ? z.replace(/^( {1,4}|\t)/, '') : (z.trim() === '' ? z : EINRUECKUNG + z)).join('\n');
+  editor.setSelectionRange(zeilenStart, zeilenEnde);
+  textEinfuegen(neu);
+  editor.setSelectionRange(zeilenStart, zeilenStart + neu.length);
+}
+
+/** Enter: neue Zeile mit derselben Einrückung, nach einem Doppelpunkt eine Stufe weiter */
+function neueZeileMitEinrueckung() {
+  const text = editor.value;
+  const zeilenStart = text.lastIndexOf('\n', editor.selectionStart - 1) + 1;
+  const bisCursor = text.slice(zeilenStart, editor.selectionStart);
+  let einrueckung = bisCursor.match(/^[ \t]*/)[0];
+  if (bisCursor.replace(/#.*$/, '').trimEnd().endsWith(':')) einrueckung += EINRUECKUNG;
+  textEinfuegen('\n' + einrueckung);
+}
 editor.addEventListener('scroll', () => { zeilennummern.scrollTop = editor.scrollTop; });
 
 // ─── Meldungen ───────────────────────────────────────────
@@ -100,12 +152,22 @@ function codePruefen() {
   }
 }
 
+// Zuletzt ausgeführter Code und sein Ergebnis. „Song als WAV“ speichert genau das, was zu hören war –
+// auch wenn der Code zufall() enthält, wird dafür nicht neu gewürfelt.
+let zuletztAusgefuehrt = { code: null, programm: null };
+
 /** Führt den Code aus. Gibt true zurück, wenn er fehlerfrei war. */
 function codeAusfuehren() {
   const programm = codePruefen();
   if (!programm) return false;
+  zuletztAusgefuehrt = { code: editor.value, programm };
+  eigeneTastenZeichnen(programm);
+  jederTaktAngehalten = false;
 
-  if (programm.hinweise.length > 0) {
+  if (programm.ausgaben.length > 0) {
+    // Ausgaben von zeige(), dazu ein eventueller Hinweis
+    zeigeMeldung([...programm.ausgaben, ...programm.hinweise.slice(0, 1)].join('\n'), 'ausgabe');
+  } else if (programm.hinweise.length > 0) {
     // Hinweise (z. B. 3-Takt-Muster) sind wichtiger als „Alles in Ordnung“
     zeigeMeldung(programm.hinweise[0], 'hinweis');
   } else if (programm.spuren.size === 0) {
@@ -136,6 +198,7 @@ engine.onStep = (step, bar) => {
   } else {
     posDisplay.textContent = `Takt ${bar + 1} · Schritt ${step + 1}`;
   }
+  raster?.schritt(step, bar);
 };
 
 // ─── Spur- und Szenenfelder ──────────────────────────────
@@ -236,10 +299,15 @@ function tastenStatusZeigen() {
     tastenStatus.textContent = 'Du schreibst gerade Code. Drücke Esc, um mit den Tasten zu spielen.';
     tastenStatus.className = 'im-textfeld';
   } else if (engine.modus === 'song') {
-    tastenStatus.textContent = 'Song-Modus: Dein Ablauf spielt von vorne bis zum Ende. Leertaste Start/Stopp.';
+    tastenStatus.textContent = 'Song-Modus: Dein Ablauf spielt von vorne bis zum Ende. Leertaste Start/Stopp, Enter Aufnahme.';
     tastenStatus.className = '';
   } else {
-    tastenStatus.textContent = 'Tasten bereit: Leertaste Start/Stopp, 1–8 Spuren, Q W E R T Szenen. Klick ins Textfeld, um Code zu schreiben.';
+    // Nur die Tasten nennen, die es in dieser Stufe schon gibt (KONZEPT.md 3.7)
+    const tasten = ['Leertaste Start/Stopp', '1–8 Spuren', 'Q W E R T Szenen'];
+    if (stufe >= 8) tasten.push('↑ ↓ Filter');
+    if (stufe >= 9) tasten.push('F Fill');
+    if (stufe >= 4) tasten.push('Enter Aufnahme');
+    tastenStatus.textContent = `Tasten bereit: ${tasten.join(', ')}. Klick ins Textfeld, um Code zu schreiben.`;
     tastenStatus.className = '';
   }
 }
@@ -252,23 +320,33 @@ editor.addEventListener('blur', tastenStatusZeigen);
 function playKnopfZeigen() {
   playBtn.textContent = engine.isPlaying ? '\u25A0 Stop' : '\u25B6 Play';
   playBtn.classList.toggle('playing', engine.isPlaying);
+  if (!engine.isPlaying) raster?.stopp();
+}
+
+/** Musik starten. Gibt false zurück, wenn es nicht geht (Fehler im Code, kein Ablauf im Song-Modus). */
+function musikStarten() {
+  anhoerenStoppen();
+  // Vor dem Start immer den aktuellen Code übernehmen
+  if (!codeAusfuehren()) return false;
+  if (engine.modus === 'song' && engine.ablauf.length === 0) {
+    zeigeMeldung('Im Song-Modus braucht dein Code einen Ablauf, zum Beispiel ablauf("q", "w", "e").', 'hinweis');
+    return false;
+  }
+  engine.start();
+  if (engine.modus === 'song') zeigeMeldung('Dein Song läuft.', 'ok');
+  playKnopfZeigen();
+  felderZeichnen();
+  return true;
 }
 
 function togglePlay() {
   if (engine.isPlaying) {
     engine.stop();
+    playKnopfZeigen();
+    felderZeichnen();
   } else {
-    // Vor dem Start immer den aktuellen Code übernehmen
-    if (!codeAusfuehren()) return;
-    if (engine.modus === 'song' && engine.ablauf.length === 0) {
-      zeigeMeldung('Im Song-Modus braucht dein Code einen Ablauf, zum Beispiel ablauf("q", "w", "e").', 'hinweis');
-      return;
-    }
-    engine.start();
-    if (engine.modus === 'song') zeigeMeldung('Dein Song läuft.', 'ok');
+    musikStarten();
   }
-  playKnopfZeigen();
-  felderZeichnen();
 }
 
 engine.onEnde = () => {
@@ -344,12 +422,226 @@ document.getElementById('demo-btn').addEventListener('click', () => {
   codeErsetzen(DEMO_TRACK, 'Der Demo-Track ist wieder da.');
 });
 
+// ─── Effekte und eigene Tasten (Lektion 8) ───────────────
+
+const filterRegler = document.getElementById('filter-regler');
+const filterWert = document.getElementById('filter-wert');
+const fillBtn = document.getElementById('fill-btn');
+const eigeneTastenFeld = document.getElementById('eigene-tasten');
+
+// Was die Befehle in eigenen Funktionen beim Tastendruck tun
+const aktionen = {
+  szeneStarten: (taste) => engine.szeneStarten(taste),
+  filter: (wert) => engine.filterSetzen(wert),
+  fill: () => engine.fillPlanen(),
+  zeige: (text) => zeigeMeldung(text, 'ausgabe'),
+  spurSetzen: (nr, daten) => engine.spurSetzen(nr, daten),
+};
+
+// jeder_takt(takt): Das Werkzeug ruft sie zu Beginn jedes Takts auf (läuft im Scheduler).
+// Bei einem Fehler wird jeder_takt angehalten, bis der Code neu ausgeführt wird.
+let jederTaktAngehalten = false;
+engine.onTaktBeginn = (takt) => {
+  const programm = engine.programm;
+  if (!programm || !programm.jederTakt || jederTaktAngehalten) return;
+  try {
+    programm.aufrufen(programm.jederTakt, [takt + ERSTER_TAKT], liveBefehle(programm, aktionen));
+  } catch (e) {
+    if (!(e instanceof CodeFehler)) throw e;
+    jederTaktAngehalten = true;
+    setTimeout(() => {
+      fehlerZeile = e.zeile;
+      zeilennummernZeichnen();
+      zeigeMeldung(`${e.message} (jeder_takt ist angehalten, bis du den Code neu ausführst.)`, 'fehler');
+    }, 0);
+  }
+};
+
+/** Eigene Funktion ausführen, die mit taste() auf diesem Buchstaben liegt. false, wenn keine dort liegt. */
+function eigeneTaste(buchstabe) {
+  const programm = zuletztAusgefuehrt.programm;
+  const funktion = programm && programm.tasten.get(buchstabe);
+  if (!funktion) return false;
+  if (engine.modus === 'song') {
+    zeigeMeldung(SONG_HINWEIS, 'hinweis');
+    return true;
+  }
+  try {
+    programm.aufrufen(funktion, [], liveBefehle(programm, aktionen));
+  } catch (e) {
+    if (!(e instanceof CodeFehler)) throw e;
+    fehlerZeile = e.zeile;
+    zeilennummernZeichnen();
+    zeigeMeldung(e.message, 'fehler');
+  }
+  return true;
+}
+
+/** Die eigenen Tasten als Knöpfe anzeigen */
+function eigeneTastenZeichnen(programm) {
+  eigeneTastenFeld.replaceChildren();
+  for (const [buchstabe, funktion] of programm.tasten) {
+    const knopf = document.createElement('button');
+    knopf.tabIndex = -1;
+    knopf.innerHTML = '<b></b><span></span>';
+    knopf.querySelector('b').textContent = buchstabe;
+    knopf.querySelector('span').textContent = funktion.name;
+    knopf.addEventListener('click', () => eigeneTaste(buchstabe));
+    eigeneTastenFeld.append(knopf);
+  }
+}
+
+function filterVerschieben(schritt) {
+  engine.filterSetzen(Math.round((engine.filterWert + schritt) * 10) / 10);
+}
+
+filterRegler.addEventListener('input', () => engine.filterSetzen(filterRegler.value / 100));
+fillBtn.addEventListener('click', () => engine.fillPlanen());
+
+engine.onEffekte = (info) => {
+  filterRegler.value = Math.round(info.filter * 100);
+  filterWert.textContent = info.filter >= 1 ? 'offen' : `${Math.round(info.filter * 100)} %`;
+  fillBtn.classList.toggle('blinkt', info.fillGeplant);
+  fillBtn.classList.toggle('an', info.fillAktiv && !info.fillGeplant);
+};
+
+// ─── Live-Aufnahme (Taste Enter) ─────────────────────────
+
+const aufnahmeBtn = document.getElementById('aufnahme-btn');
+const aufnahmeStatus = document.getElementById('aufnahme-status');
+const aufnahmeErgebnis = document.getElementById('aufnahme-ergebnis');
+const aufnahmeInfo = document.getElementById('aufnahme-info');
+const anhoerenBtn = document.getElementById('anhoeren-btn');
+const aufnahmeWavBtn = document.getElementById('aufnahme-wav-btn');
+
+let letzteAufnahme = null;  // { takte, sekunden, code }
+let aufnahmePuffer = null;  // fertig berechnete Aufnahme (beim ersten Anhören oder Speichern)
+let wiedergabe = null;      // läuft gerade das Anhören?
+
+function zeitText(sekunden) {
+  const s = Math.round(sekunden);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function aufnahmeUmschalten() {
+  if (engine.aufnahme) {
+    engine.aufnahmeBeenden();
+    return;
+  }
+  engine.aufnahmeStarten();
+  if (!engine.isPlaying) {
+    // Ohne laufende Musik: Musik und Aufnahme starten zusammen
+    if (musikStarten()) {
+      zeigeMeldung('Die Aufnahme läuft. Drücke Enter, um sie zu beenden.', 'ok');
+    } else {
+      engine.aufnahmeBeenden();
+    }
+  } else {
+    zeigeMeldung('Die Aufnahme beginnt am Anfang des nächsten Takts.', 'hinweis');
+  }
+}
+
+engine.onAufnahme = (info) => {
+  aufnahmeBtn.classList.toggle('wartet', info.zustand === 'wartet');
+  aufnahmeBtn.classList.toggle('laeuft', info.zustand === 'laeuft');
+  if (info.zustand === 'wartet') {
+    aufnahmeBtn.textContent = '● Wartet auf den Takt …';
+    aufnahmeStatus.textContent = '';
+  } else if (info.zustand === 'laeuft') {
+    if (aufnahmeBtn.textContent.startsWith('● Wartet')) {
+      zeigeMeldung('Die Aufnahme läuft. Drücke Enter, um sie zu beenden.', 'ok');
+    }
+    aufnahmeBtn.textContent = '■ Aufnahme beenden';
+    aufnahmeStatus.textContent = `${info.takte} ${info.takte === 1 ? 'Takt' : 'Takte'} · ${zeitText(info.sekunden)}`;
+  } else {
+    aufnahmeBtn.textContent = '● Aufnehmen';
+    aufnahmeStatus.textContent = '';
+  }
+  if (info.zustand === 'fertig') {
+    letzteAufnahme = { takte: info.takte, sekunden: info.sekunden, code: editor.value };
+    aufnahmePuffer = null;
+    aufnahmeInfo.textContent = `Deine Aufnahme: ${info.takte.length} ${info.takte.length === 1 ? 'Takt' : 'Takte'}, ${zeitText(info.sekunden)}`;
+    aufnahmeErgebnis.hidden = false;
+    playKnopfZeigen();
+    felderZeichnen();
+    zeigeMeldung('Aufnahme fertig! Hör sie dir an oder speichere sie als WAV.', 'ok');
+  } else if (info.zustand === 'leer') {
+    playKnopfZeigen();
+    if (meldung.className !== 'fehler') zeigeMeldung('Aufnahme abgebrochen. Es wurde noch kein Takt aufgenommen.', 'hinweis');
+  }
+};
+
+/** Die letzte Aufnahme berechnen (nur einmal, danach aus dem Speicher) */
+async function aufnahmeBerechnen() {
+  if (!aufnahmePuffer) {
+    aufnahmePuffer = await takteBerechnen(letzteAufnahme.takte, (prozent) => {
+      zeigeMeldung(`Deine Aufnahme wird berechnet … ${prozent} %`, 'wartet');
+    });
+  }
+  return aufnahmePuffer;
+}
+
+function anhoerenStoppen() {
+  if (!wiedergabe) return;
+  wiedergabe.onended = null;
+  wiedergabe.stop();
+  wiedergabe = null;
+  anhoerenBtn.textContent = '▶ Anhören';
+}
+
+anhoerenBtn.addEventListener('click', async () => {
+  if (wiedergabe) {
+    anhoerenStoppen();
+    return;
+  }
+  if (engine.isPlaying) togglePlay(); // Live-Musik und Aufnahme nicht übereinander
+  engine.init();
+  anhoerenBtn.disabled = aufnahmeWavBtn.disabled = true;
+  zeigeMeldung('Deine Aufnahme wird berechnet …', 'wartet');
+  try {
+    const puffer = await aufnahmeBerechnen();
+    const quelle = engine.audioCtx.createBufferSource();
+    quelle.buffer = puffer;
+    quelle.connect(engine.audioCtx.destination); // schon fertig abgemischt
+    quelle.onended = () => {
+      wiedergabe = null;
+      anhoerenBtn.textContent = '▶ Anhören';
+    };
+    quelle.start();
+    wiedergabe = quelle;
+    anhoerenBtn.textContent = '■ Stopp';
+    zeigeMeldung('Du hörst deine Aufnahme.', 'ok');
+  } catch (e) {
+    zeigeMeldung(e.message, 'fehler');
+  } finally {
+    anhoerenBtn.disabled = aufnahmeWavBtn.disabled = false;
+  }
+});
+
+aufnahmeWavBtn.addEventListener('click', async () => {
+  anhoerenBtn.disabled = aufnahmeWavBtn.disabled = true;
+  zeigeMeldung('Deine Aufnahme wird berechnet …', 'wartet');
+  try {
+    const puffer = await aufnahmeBerechnen();
+    const name = dateiname(letzteAufnahme.code, 'wav').replace(/\.wav$/, '-live.wav');
+    herunterladen(wavErzeugen(puffer), name);
+    zeigeMeldung(`Gespeichert: ${name} (${Math.round(puffer.duration)} Sekunden). Du findest die Datei in deinem Download-Ordner.`, 'ok');
+  } catch (e) {
+    zeigeMeldung(e.message, 'fehler');
+  } finally {
+    anhoerenBtn.disabled = aufnahmeWavBtn.disabled = false;
+  }
+});
+
+aufnahmeBtn.addEventListener('click', aufnahmeUmschalten);
+
 // ─── Song als WAV speichern ──────────────────────────────
 
 const exportBtn = document.getElementById('export-btn');
 
 async function songSpeichern() {
-  const programm = codePruefen();
+  // Unveränderter Code: genau das speichern, was zu hören war (kein neues Würfeln)
+  const programm = editor.value === zuletztAusgefuehrt.code ? zuletztAusgefuehrt.programm : codePruefen();
   if (!programm) return;
   if (programm.ablauf.length === 0) {
     zeigeMeldung('Zum Speichern braucht dein Code einen Ablauf, zum Beispiel ablauf("q", "w", "e").', 'hinweis');
@@ -408,6 +700,13 @@ document.addEventListener('keydown', (e) => {
   // Im Textfeld wird getippt. Nur Esc verlässt es.
   if (e.target === editor) {
     if (e.key === 'Escape') editor.blur();
+    else if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      einruecken(e.shiftKey);
+    } else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      neueZeileMitEinrueckung();
+    }
     return;
   }
 
@@ -422,6 +721,25 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
+  if (e.key === 'Enter') {
+    if (stufe < 4) return;
+    e.preventDefault();
+    aufnahmeUmschalten();
+    return;
+  }
+
+  // Filter mit den Pfeiltasten, Fill mit F (auch im Song-Modus)
+  if (stufe >= 8 && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    filterVerschieben(e.key === 'ArrowUp' ? 0.1 : -0.1);
+    return;
+  }
+  if (stufe >= 9 && e.key.toLowerCase() === 'f') {
+    e.preventDefault();
+    engine.fillPlanen();
+    return;
+  }
+
   const taste = e.key.toLowerCase();
   if (taste >= '1' && taste <= '8' && taste.length === 1) {
     e.preventDefault();
@@ -429,10 +747,19 @@ document.addEventListener('keydown', (e) => {
   } else if (SZENEN_TASTEN.includes(taste)) {
     e.preventDefault();
     szeneStarten(taste);
+  } else if (stufe >= 8 && /^[a-z]$/.test(taste) && eigeneTaste(taste)) {
+    e.preventDefault();
   }
 });
 
 zeilennummernZeichnen();
+
+// Raster für Beats (ab Stufe 2) und Melodien (ab Stufe 3), KONZEPT.md 3.8: Ein Klick ändert den Code. Läuft Musik, wird er gleich übernommen.
+if (stufe >= 2) {
+  raster = rasterEinrichten(editor, document.getElementById('beat-raster'), stufe, () => {
+    if (engine.isPlaying) codeAusfuehren();
+  });
+}
 
 // Beim Laden einmal ausführen, damit Tempo, Tonart und Felder stimmen
 const startCodeOk = codeAusfuehren();

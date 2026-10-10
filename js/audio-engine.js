@@ -1,11 +1,14 @@
 // audio-engine.js – Lookahead-Scheduler und Klangerzeugung
 // Basiert auf Chris Wilsons "A Tale of Two Clocks"
 
-import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=8d8df3a';
-import { frequenz, STANDARD_TONART } from './tonart.js?v=8d8df3a';
+import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=880257c';
+import { frequenz, STANDARD_TONART } from './tonart.js?v=880257c';
 
 /** Im Song-Modus spielt jeder Eintrag des Ablaufs so viele Takte */
 export const TAKTE_PRO_TEIL = 4;
+
+/** Längere Aufnahmen würden beim Speichern zu viel Speicher brauchen */
+export const AUFNAHME_MAX_SEKUNDEN = 10 * 60;
 
 /**
  * Gesamtsumme: Eingangsregler → Limiter → Ausgleich → sanfte Begrenzung.
@@ -48,13 +51,32 @@ export function summeAufbauen(ctx) {
   const halb = ctx.createGain();
   halb.gain.value = 0.5;
 
-  eingang.connect(limiter);
+  // Filter für das Live-Spiel (Lektion 8): ganz offen hört man ihn nicht
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = filterFrequenz(1);
+  filter.Q.value = 1.2;
+
+  eingang.connect(filter);
+  filter.connect(limiter);
   limiter.connect(ausgleich);
   ausgleich.connect(halb);
   halb.connect(begrenzer);
   begrenzer.connect(ctx.destination);
+  eingang.filterKnoten = filter;
   return eingang;
 }
+
+/** Filterwert 0 (dunkel) … 1 (offen) → Grenzfrequenz in Hz, gleichmäßig fürs Ohr (exponentiell) */
+export function filterFrequenz(wert) {
+  return 150 * Math.pow(20000 / 150, wert);
+}
+
+/** Trommelwirbel für fill(): Snare und Tom im zweiten Teil des Takts, lauter werdend */
+export const FILL_MUSTER = {
+  snare: '........x.o.xxXX',
+  tom: '..........x.x.x.',
+};
 
 export class AudioEngine {
   constructor() {
@@ -97,6 +119,24 @@ export class AudioEngine {
     this.onProgrammUebernommen = null;
     this.onLiveZustand = null;
     this.onEnde = null;   // Song ist zu Ende gespielt
+
+    // Live-Aufnahme: null oder { zustand: 'wartet' | 'laeuft', takte: [...], sekunden }
+    // Pro Takt wird gemerkt, was gespielt hat (Code, Tempo, Tonart, aktive Spuren).
+    // Daraus wird die Aufnahme danach exakt neu berechnet (export.js).
+    this.aufnahme = null;
+    this.onAufnahme = null; // UI: (info) mit info.zustand 'wartet' | 'laeuft' | 'fertig' | 'leer'
+
+    // Live-Effekte (Lektion 8)
+    this.filterWert = 1;       // 0 = dunkel … 1 = offen
+    this.fillGeplant = false;  // Fill im nächsten Takt
+    this.fillAktiv = false;    // Fill im laufenden Takt
+    this.onEffekte = null;     // UI: Filterwert, Fill-Zustand
+
+    // jeder_takt (Lektion 9): wird zu Beginn jedes Takts aufgerufen, darin wirken Befehle im selben Takt
+    this.onTaktBeginn = null;  // (takt) => …  (läuft im Scheduler, muss schnell sein)
+    this.imTaktBeginn = false;
+    this.wartendeSpuren = new Map(); // spur() beim Tastendruck: ab dem nächsten Takt
+    this.programm = null;            // das gerade klingende Programm
   }
 
   /** AudioContext initialisieren (muss nach User-Geste aufgerufen werden) */
@@ -104,6 +144,7 @@ export class AudioEngine {
     if (!this.audioCtx) {
       this.audioCtx = new AudioContext();
       this.ausgang = summeAufbauen(this.audioCtx);
+      this.ausgang.filterKnoten.frequency.value = filterFrequenz(this.filterWert);
     }
     if (this.audioCtx.state === 'suspended') {
       this.audioCtx.resume();
@@ -148,6 +189,7 @@ export class AudioEngine {
       }
     }
 
+    this.programm = programm;
     this.bpm = programm.tempo;
     this.tonart = programm.tonart;
     this.spuren = programm.spuren;
@@ -220,7 +262,7 @@ export class AudioEngine {
     this.currentStep = 0;
     this.currentBar = 0;
     this.nextStepTime = this.audioCtx.currentTime + 0.05; // kleiner Puffer
-    if (this.modus === 'song') this._songTakt();
+    this._taktBeginnen(false);
     this._schedule();
   }
 
@@ -233,7 +275,10 @@ export class AudioEngine {
     }
     // Wartendes Programm und geplante Umschaltungen nicht verlieren
     if (this.wartendesProgramm) this._uebernehmen(this.wartendesProgramm);
+    this._wartendeSpurenAnwenden();
     this._zielAnwenden();
+    // Mit der Musik endet auch die Aufnahme
+    if (this.aufnahme) this.aufnahmeBeenden();
   }
 
   /** Scheduler-Schleife: plant alle fälligen Schritte voraus */
@@ -259,6 +304,13 @@ export class AudioEngine {
     // Gemeinsame Uhr: Position im Muster ergibt sich aus Takt und Schritt.
     // Kürzere Muster wiederholen sich automatisch.
     const gesamtSchritt = this.currentBar * 16 + step;
+    // Fill (einmaliger Trommelwirbel) zusätzlich zu den Spuren
+    if (this.fillAktiv) {
+      for (const [klang, muster] of Object.entries(FILL_MUSTER)) {
+        if (muster[step] !== '.') SCHLAGZEUG[klang](this.audioCtx, time, muster[step], this.ausgang, 0.9);
+      }
+    }
+
     for (const [nr, spur] of this.spuren) {
       if (!this.aktiv.has(nr)) continue;
       const ereignis = spur.muster[gesamtSchritt % spur.muster.length];
@@ -289,12 +341,146 @@ export class AudioEngine {
       // Taktanfang: jetzt wird neuer Code übernommen (auch neues Tempo)
       const neuerCode = this.wartendesProgramm !== null;
       if (neuerCode) this._uebernehmen(this.wartendesProgramm);
-      if (this.modus === 'song') {
-        this._songTakt(neuerCode);
-      } else {
-        this._zielAnwenden();
+      this._taktBeginnen(neuerCode);
+    }
+  }
+
+  /**
+   * Alles, was zu Beginn eines Takts passiert, in fester Reihenfolge:
+   * wartende Spuren → jeder_takt → Szenen (Song-Ablauf oder Live-Umschaltung) → Fill → Aufnahme
+   */
+  _taktBeginnen(neuerCode) {
+    this._wartendeSpurenAnwenden();
+    if (this.onTaktBeginn) {
+      this.imTaktBeginn = true;
+      try {
+        this.onTaktBeginn(this.currentBar);
+      } finally {
+        this.imTaktBeginn = false;
       }
     }
+    if (this.modus === 'song') {
+      this._songTakt(neuerCode);
+      if (!this.isPlaying) return; // Song zu Ende
+    } else {
+      this._zielAnwenden();
+    }
+    this._fillTakt();
+    this._aufnahmeTakt();
+  }
+
+  // ─── spur() zur Laufzeit (in jeder_takt oder beim Tastendruck) ───
+
+  /** Spur ersetzen oder neu anlegen. In jeder_takt sofort, sonst ab dem nächsten Takt. */
+  spurSetzen(nr, daten) {
+    if (this.imTaktBeginn || !this.isPlaying) {
+      this._spurJetztSetzen(nr, daten);
+    } else {
+      this.wartendeSpuren.set(nr, daten);
+    }
+  }
+
+  _spurJetztSetzen(nr, daten) {
+    const neu = new Map(this.spuren); // nicht verändern: Aufnahme-Takte zeigen noch auf die alte Map
+    if (!this.spuren.has(nr)) {
+      this.aktiv.add(nr);
+      if (this.ziel) this.ziel.add(nr);
+    }
+    neu.set(nr, daten);
+    this.spuren = neu;
+    this._meldeLive();
+  }
+
+  _wartendeSpurenAnwenden() {
+    if (this.wartendeSpuren.size === 0) return;
+    for (const [nr, daten] of this.wartendeSpuren) this._spurJetztSetzen(nr, daten);
+    this.wartendeSpuren.clear();
+  }
+
+  /** Am Taktanfang: geplanten Fill in diesem Takt spielen */
+  _fillTakt() {
+    const vorher = this.fillAktiv;
+    this.fillAktiv = this.fillGeplant;
+    this.fillGeplant = false;
+    if (vorher || this.fillAktiv) this._meldeEffekte(false);
+  }
+
+  // ─── Live-Aufnahme ─────────────────────────────────────
+
+  /**
+   * Aufnahme starten. Läuft keine Musik, beginnt sie sofort mit dem Start (der Aufrufer startet die Musik).
+   * Läuft Musik, beginnt sie am nächsten Taktanfang.
+   */
+  aufnahmeStarten() {
+    this.aufnahme = { zustand: 'wartet', takte: [], sekunden: 0 };
+    this._meldeAufnahme(true);
+  }
+
+  /** Aufnahme beenden. Der laufende Takt ist schon gemerkt und wird ganz mitgenommen. */
+  aufnahmeBeenden() {
+    const a = this.aufnahme;
+    if (!a) return;
+    this.aufnahme = null;
+    const info = a.takte.length > 0
+      ? { zustand: 'fertig', takte: a.takte, sekunden: a.sekunden }
+      : { zustand: 'leer' };
+    if (this.onAufnahme) setTimeout(() => this.onAufnahme(info), 0);
+  }
+
+  // ─── Live-Effekte ──────────────────────────────────────
+
+  /** Filter setzen: 0 = dunkel … 1 = offen. Wirkt sofort, weich übergeblendet. */
+  filterSetzen(wert) {
+    this.filterWert = Math.min(1, Math.max(0, wert));
+    const knoten = this.ausgang && this.ausgang.filterKnoten;
+    if (knoten) knoten.frequency.setTargetAtTime(filterFrequenz(this.filterWert), this.audioCtx.currentTime, 0.04);
+    // Für die Aufnahme: Änderung mit ungefährer Position im laufenden Takt merken
+    // (In jeder_takt nicht nötig: Der neue Takt merkt sich den Filterwert gleich danach.)
+    const a = this.aufnahme;
+    if (a && a.zustand === 'laeuft' && a.takte.length > 0 && !this.imTaktBeginn) {
+      a.takte[a.takte.length - 1].filter.push({ schritt: this.currentStep, wert: this.filterWert });
+    }
+    this._meldeEffekte();
+  }
+
+  /** Fill: einmalig im nächsten Takt ein Trommelwirbel */
+  fillPlanen() {
+    this.fillGeplant = true;
+    this._meldeEffekte();
+  }
+
+  _meldeEffekte(sofort = true) {
+    if (!this.onEffekte) return;
+    const info = { filter: this.filterWert, fillGeplant: this.fillGeplant, fillAktiv: this.fillAktiv };
+    setTimeout(() => this.onEffekte(info), sofort ? 0 : this._msBisNaechsterSchritt());
+  }
+
+  /** Am Taktanfang: Zustand für die Aufnahme merken */
+  _aufnahmeTakt() {
+    const a = this.aufnahme;
+    if (!a || !this.isPlaying) return;
+    if (a.sekunden + 16 * this.stepDuration > AUFNAHME_MAX_SEKUNDEN) {
+      this.aufnahmeBeenden();
+      return;
+    }
+    a.zustand = 'laeuft';
+    a.takte.push({
+      takt: this.currentBar,          // für die richtige Stelle in längeren Mustern
+      bpm: this.bpm,
+      tonart: this.tonart,
+      spuren: this.spuren,            // wird bei neuem Code ersetzt, nie verändert
+      aktiv: new Set(this.aktiv),
+      fill: this.fillAktiv,
+      filter: [{ schritt: 0, wert: this.filterWert }],
+    });
+    a.sekunden += 16 * this.stepDuration;
+    this._meldeAufnahme();
+  }
+
+  _meldeAufnahme(sofort = false) {
+    if (!this.onAufnahme || !this.aufnahme) return;
+    const info = { zustand: this.aufnahme.zustand, takte: this.aufnahme.takte.length, sekunden: this.aufnahme.sekunden };
+    setTimeout(() => this.onAufnahme(info), sofort ? 0 : this._msBisNaechsterSchritt());
   }
 
   // ─── Song-Modus ────────────────────────────────────────

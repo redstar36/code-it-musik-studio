@@ -1,14 +1,27 @@
 // befehle.js – die Funktionen, die Kinder in ihrem Code benutzen können.
 // Jeder Befehl prüft seine Angaben und meldet Fehler auf Deutsch mit Zeilenangabe.
 
-import { ausfuehren, fehler, aehnlichstes } from './interpreter.js?v=8d8df3a';
-import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=8d8df3a';
-import { leseTonart, STANDARD_TONART } from './tonart.js?v=8d8df3a';
+import { ausfuehren, fehler, aehnlichstes, Funktion } from './interpreter.js?v=880257c';
+import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=880257c';
+import { leseTonart, STANDARD_TONART } from './tonart.js?v=880257c';
 
 const SCHRITTE_PRO_TAKT = 16;
 const MAX_TAKTE = 4;
 const HOECHSTE_STUFE = 14;
 export const SZENEN_TASTEN = ['q', 'w', 'e', 'r', 't'];
+/** Buchstaben, die schon fest belegt sind (Szenen und Fill) und nicht mit taste() belegt werden dürfen */
+export const FESTE_TASTEN = [...SZENEN_TASTEN, 'f'];
+
+/**
+ * Welche Nummer der erste Takt in jeder_takt(takt) hat. KONZEPT.md (Lektion 9) zählt ab 0:
+ * `if takt % 4 == 3: fill()` trifft dann den 4. Takt jeder Gruppe. Offene Frage: ab 1 zählen?
+ */
+export const ERSTER_TAKT = 0;
+
+// Befehle, die nur beim Tastendruck wirken (in einer Funktion, die mit taste() auf einer Taste liegt)
+const LIVE_BEFEHLE = ['szene_starten', 'filter', 'fill'];
+// Befehle, die das Programm aufbauen und deshalb beim Tastendruck nicht gehen
+const AUFBAU_BEFEHLE = ['tempo', 'tonart', 'szene', 'ablauf', 'taste'];
 
 /** Ein Baustein ist das, was beat() und melodie() zurückgeben */
 class Baustein {
@@ -52,6 +65,65 @@ function dreiTakteHinweis(anzahlSchritte, was, extra = '') {
   return `ist ${was} 3 Takte lang. Musik denkt in Gruppen von 4 Takten, deshalb ist der 4. Takt still.${extra}`;
 }
 
+/** Wert für eine Fehlermeldung lesbar machen (Bausteine und Listen nicht als „[object Object]“) */
+function lesbar(wert) {
+  if (wert instanceof Baustein) return 'ein Baustein';
+  if (Array.isArray(wert)) return `die Liste [${wert.join(', ')}]`;
+  if (wert instanceof Funktion) return `die Funktion ${wert.name}`;
+  if (typeof wert === 'string') return `"${wert}"`;
+  return String(wert);
+}
+
+const MAX_AUSGABEN = 20;
+
+/** Wert für zeige() so darstellen, wie man ihn im Code schreiben würde */
+function alsText(wert) {
+  if (wert instanceof Baustein) {
+    return wert.art === 'beat' ? `ein Beat (${wert.klang})` : `eine Melodie (${wert.klang})`;
+  }
+  if (Array.isArray(wert)) return `[${wert.map(alsText).join(', ')}]`;
+  if (typeof wert === 'string') return `"${wert}"`;
+  if (wert === undefined) return 'nichts';
+  if (wert instanceof Funktion) return `die Funktion ${wert.name}`;
+  if (typeof wert === 'boolean') return wert ? 'True' : 'False';
+  return String(wert);
+}
+
+/** spur(nummer, baustein, lautstaerke=…) prüfen; gibt { nummer, daten } zurück. Auch für spur in jeder_takt. */
+function spurLesen(positionell, benannt, zeile) {
+  const { nummer, baustein, lautstaerke } =
+    angaben('spur', ['nummer', 'baustein', 'lautstaerke'], positionell, benannt, zeile);
+  if (nummer === undefined || baustein === undefined) {
+    throw fehler(zeile, 'braucht spur eine Nummer und einen Baustein, zum Beispiel spur(1, kick).');
+  }
+  if (nummer instanceof Baustein) {
+    throw fehler(zeile, 'steht bei spur der Baustein vorne. Zuerst kommt die Spurnummer, dann der Baustein, zum Beispiel spur(4, bass).');
+  }
+  if (!istGanzeZahl(nummer) || nummer < 1 || nummer > 8) {
+    throw fehler(zeile, `ist ${lesbar(nummer)} keine gültige Spur. Es gibt die Spuren 1 bis 8.`);
+  }
+  if (!(baustein instanceof Baustein)) {
+    throw fehler(zeile, 'braucht spur als zweite Angabe einen Baustein, zum Beispiel einen Beat: spur(1, kick).');
+  }
+  let lautstaerkeWert = 100;
+  if (lautstaerke !== undefined) {
+    if (typeof lautstaerke !== 'number' || lautstaerke < 0 || lautstaerke > 100) {
+      throw fehler(zeile, 'muss die Lautstärke eine Zahl von 0 bis 100 sein.');
+    }
+    lautstaerkeWert = lautstaerke;
+  }
+  return {
+    nummer,
+    daten: {
+      art: baustein.art,
+      muster: baustein.muster,
+      klang: baustein.klang,
+      oktave: baustein.oktave,
+      lautstaerke: lautstaerkeWert / 100,
+    },
+  };
+}
+
 function istGanzeZahl(x) {
   return typeof x === 'number' && Number.isInteger(x);
 }
@@ -66,11 +138,14 @@ function pruefeKlang(klang, eigene, fremde, befehl, andererBefehl, zeile, beispi
     throw fehler(zeile, `fehlt bei ${befehl} der Klang, zum Beispiel klang="${beispiel}". Es gibt: ${namen.join(', ')}.`);
   }
   if (typeof klang === 'string' && eigene[klang]) return;
+  if (typeof klang !== 'string') {
+    throw fehler(zeile, `fehlen beim Klang die Anführungszeichen. Schreibe zum Beispiel klang="${beispiel}".`);
+  }
   if (typeof klang === 'string' && fremde[klang]) {
     throw fehler(zeile, `ist ${klang} ein Klang für ${andererBefehl}, nicht für ${befehl}. Bei ${befehl} gibt es: ${namen.join(', ')}.`);
   }
   const vorschlag = typeof klang === 'string' ? aehnlichstes(klang, namen) : null;
-  throw fehler(zeile, `kenne ich den Klang ${klang} nicht.` +
+  throw fehler(zeile, `kenne ich den Klang ${lesbar(klang)} nicht.` +
     (vorschlag ? ` Meintest du "${vorschlag}"?` : ` Es gibt: ${namen.join(', ')}.`));
 }
 
@@ -109,7 +184,7 @@ function leseBeat(muster, zeile) {
 /** Prüft eine einzelne Stufe (Zahl von 1 bis 14) */
 function pruefeStufe(stufe, zeile) {
   if (!istGanzeZahl(stufe)) {
-    throw fehler(zeile, `steht in der Melodie ${typeof stufe === 'string' ? `"${stufe}"` : stufe}. Töne sind ganze Zahlen von 1 bis ${HOECHSTE_STUFE}.`);
+    throw fehler(zeile, `steht in der Melodie ${lesbar(stufe)}. Töne sind ganze Zahlen von 1 bis ${HOECHSTE_STUFE}.`);
   }
   if (stufe < 1 || stufe > HOECHSTE_STUFE) {
     throw fehler(zeile, `steht in der Melodie der Ton ${stufe}. Töne gehen von 1 bis ${HOECHSTE_STUFE}.`);
@@ -222,11 +297,14 @@ function pruefeOktave(oktave, klang, zeile) {
  * Führt den Code aus und liefert das Ergebnis:
  * { tempo, tonart, spuren: Map(nummer → { art, muster, klang, oktave, lautstaerke }),
  *   szenen: Map(taste → Liste von Spurnummern), ablauf: Liste von Szenen-Tasten,
- *   hinweise: Liste von Texten (kein Fehler, nur zur Info) }
+ *   hinweise: Liste von Texten (kein Fehler, nur zur Info),
+ *   ausgaben: Liste von Texten aus zeige(),
+ *   tasten: Map(buchstabe → Funktion), jederTakt: Funktion oder null,
+ *   aufrufen: Funktionen später aufrufen (siehe interpreter.js) }
  * Bei einem Fehler wird ein CodeFehler geworfen.
  */
 export function programmAusfuehren(code) {
-  const ergebnis = { tempo: 120, tonart: STANDARD_TONART, spuren: new Map(), szenen: new Map(), ablauf: [], hinweise: [] };
+  const ergebnis = { tempo: 120, tonart: STANDARD_TONART, spuren: new Map(), szenen: new Map(), ablauf: [], hinweise: [], ausgaben: [], tasten: new Map() };
 
   /** 3-Takt-Muster auf 4 Takte ergänzen und Hinweis merken (Muster ist Text oder Liste) */
   function aufVierTakte(muster, was, zeile, extra) {
@@ -312,7 +390,7 @@ export function programmAusfuehren(code) {
       }
       for (const nr of spuren) {
         if (!istGanzeZahl(nr) || nr < 1 || nr > 8) {
-          throw fehler(zeile, `ist ${typeof nr === 'string' ? `"${nr}"` : nr} keine gültige Spur. Schreibe Spurnummern von 1 bis 8 ohne Anführungszeichen.`);
+          throw fehler(zeile, `ist ${lesbar(nr)} keine gültige Spur. Schreibe Spurnummern von 1 bis 8 ohne Anführungszeichen.`);
         }
       }
       ergebnis.szenen.set(t, [...new Set(spuren)]);
@@ -329,7 +407,7 @@ export function programmAusfuehren(code) {
       const tasten = [];
       for (const taste of positionell) {
         if (typeof taste !== 'string') {
-          throw fehler(zeile, `steht im Ablauf ${taste}. Schreibe Szenen-Tasten in Anführungszeichen, zum Beispiel ablauf("q", "w").`);
+          throw fehler(zeile, `steht im Ablauf ${lesbar(taste)}. Schreibe Szenen-Tasten in Anführungszeichen, zum Beispiel ablauf("q", "w").`);
         }
         const t = taste.toLowerCase();
         if (!SZENEN_TASTEN.includes(t)) {
@@ -368,36 +446,82 @@ export function programmAusfuehren(code) {
       return new Baustein('melodie', schritte, klang, pruefeOktave(oktave, klang, zeile));
     },
 
+    /** Zufälliges Element einer Liste (Lektion 7). Bei jedem Ausführen wird neu gewürfelt. */
+    zufall(positionell, benannt, zeile) {
+      if (positionell.length > 1) {
+        throw fehler(zeile, `fehlen bei zufall die eckigen Klammern. Schreibe zum Beispiel zufall([${positionell.map(lesbar).join(', ')}]).`);
+      }
+      const { liste } = angaben('zufall', ['liste'], positionell, benannt, zeile);
+      if (!Array.isArray(liste)) {
+        throw fehler(zeile, `braucht zufall eine Liste, aus der es auswählt, zum Beispiel zufall([1, 3, 5]). Hier steht ${liste === undefined ? 'nichts' : lesbar(liste)}.`);
+      }
+      if (liste.length === 0) {
+        throw fehler(zeile, 'ist die Liste bei zufall leer. Aus einer leeren Liste kann nichts gewürfelt werden.');
+      }
+      return liste[Math.floor(Math.random() * liste.length)];
+    },
+
+    /** Einen Wert unter dem Code anzeigen (wie print in Python) */
+    zeige(positionell, benannt, zeile) {
+      if (Object.keys(benannt).length > 0 || positionell.length === 0) {
+        throw fehler(zeile, 'braucht zeige etwas zum Anzeigen, zum Beispiel zeige(lied).');
+      }
+      if (ergebnis.ausgaben.length < MAX_AUSGABEN) {
+        ergebnis.ausgaben.push(`Zeile ${zeile}: ${positionell.map(alsText).join(' ')}`);
+      } else if (ergebnis.ausgaben.length === MAX_AUSGABEN) {
+        ergebnis.ausgaben.push(`… (mehr als ${MAX_AUSGABEN} Ausgaben, der Rest wird nicht angezeigt)`);
+      }
+    },
+
+    /** Eigene Funktion auf eine Taste legen (Lektion 8) */
+    taste(positionell, benannt, zeile) {
+      const { buchstabe, funktion } = angaben('taste', ['buchstabe', 'funktion'], positionell, benannt, zeile);
+      if (typeof buchstabe !== 'string' || !/^[a-zA-Z]$/.test(buchstabe)) {
+        throw fehler(zeile, `braucht taste zuerst einen Buchstaben in Anführungszeichen, zum Beispiel taste("d", drop). Hier steht ${buchstabe === undefined ? 'nichts' : lesbar(buchstabe)}.`);
+      }
+      const b = buchstabe.toLowerCase();
+      if (FESTE_TASTEN.includes(b)) {
+        throw fehler(zeile, `ist die Taste ${b} schon belegt (${b === 'f' ? 'Fill' : 'Szenen'}). Nimm zum Beispiel a, s, d, g, h, j, k oder l.`);
+      }
+      if (funktion === undefined) {
+        throw fehler(zeile, `fehlt bei taste die Funktion, zum Beispiel taste("${b}", drop).`);
+      }
+      if (!(funktion instanceof Funktion)) {
+        throw fehler(zeile, `braucht taste den Namen einer Funktion ohne Klammern, zum Beispiel taste("${b}", drop). Lege die Funktion vorher mit def an.`);
+      }
+      if (funktion.parameter.length > 0) {
+        throw fehler(zeile, `braucht die Funktion ${funktion.name} Angaben. Eine Funktion für eine Taste hat keine Angaben in den Klammern: def ${funktion.name}():`);
+      }
+      ergebnis.tasten.set(b, funktion);
+    },
+
     spur(positionell, benannt, zeile) {
-      const { nummer, baustein, lautstaerke } =
-        angaben('spur', ['nummer', 'baustein', 'lautstaerke'], positionell, benannt, zeile);
-      if (nummer === undefined || baustein === undefined) {
-        throw fehler(zeile, 'braucht spur eine Nummer und einen Baustein, zum Beispiel spur(1, kick).');
-      }
-      if (!istGanzeZahl(nummer) || nummer < 1 || nummer > 8) {
-        throw fehler(zeile, `ist ${nummer} keine gültige Spur. Es gibt die Spuren 1 bis 8.`);
-      }
-      if (!(baustein instanceof Baustein)) {
-        throw fehler(zeile, 'braucht spur als zweite Angabe einen Baustein, zum Beispiel einen Beat: spur(1, kick).');
-      }
-      let lautstaerkeWert = 100;
-      if (lautstaerke !== undefined) {
-        if (typeof lautstaerke !== 'number' || lautstaerke < 0 || lautstaerke > 100) {
-          throw fehler(zeile, 'muss die Lautstärke eine Zahl von 0 bis 100 sein.');
-        }
-        lautstaerkeWert = lautstaerke;
-      }
-      ergebnis.spuren.set(nummer, {
-        art: baustein.art,
-        muster: baustein.muster,
-        klang: baustein.klang,
-        oktave: baustein.oktave,
-        lautstaerke: lautstaerkeWert / 100,
-      });
+      const { nummer, daten } = spurLesen(positionell, benannt, zeile);
+      ergebnis.spuren.set(nummer, daten);
     },
   };
 
-  ausfuehren(code, befehle);
+  // Live-Befehle beim Ausführen des Codes: noch nicht erlaubt (sie wirken erst beim Tastendruck)
+  for (const name of LIVE_BEFEHLE) {
+    befehle[name] = (positionell, benannt, zeile) => {
+      throw fehler(zeile, `wirkt ${name} erst, wenn eine Taste gedrückt wird. Schreibe den Befehl in eine Funktion und lege sie auf eine Taste: def drop(): … und taste("d", drop). Hinter drop stehen dabei keine Klammern.`);
+    };
+  }
+
+  const laufzeit = ausfuehren(code, befehle);
+  ergebnis.aufrufen = laufzeit.aufrufen;
+
+  // jeder_takt(takt): ruft das Werkzeug zu Beginn jedes Takts auf (Lektion 9)
+  const jt = laufzeit.globale('jeder_takt');
+  ergebnis.jederTakt = null;
+  if (jt instanceof Funktion) {
+    if (jt.parameter.length !== 1) {
+      throw fehler(jt.zeile, 'braucht jeder_takt genau eine Angabe für die Taktnummer: def jeder_takt(takt):');
+    }
+    ergebnis.jederTakt = jt;
+  } else if (jt !== undefined) {
+    throw fehler(1, 'ist jeder_takt ein besonderer Name für eine Funktion. Lege sie mit def jeder_takt(takt): an.');
+  }
 
   // Erst am Ende prüfen: Szenen dürfen vor den spur()-Zeilen stehen
   for (const [taste, spuren] of ergebnis.szenen) {
@@ -416,4 +540,53 @@ export function programmAusfuehren(code) {
     }
   }
   return ergebnis;
+}
+
+/**
+ * Befehle, die beim Tastendruck wirken. aktionen kommt von der Oberfläche:
+ * { szeneStarten(taste), filter(wert), fill(), zeige(text) }
+ * Gibt die Befehle zurück, die beim Aufruf einer eigenen Funktion zusätzlich gelten.
+ */
+export function liveBefehle(programm, aktionen) {
+  const live = {
+    szene_starten(positionell, benannt, zeile) {
+      const { taste } = angaben('szene_starten', ['taste'], positionell, benannt, zeile);
+      const t = typeof taste === 'string' ? taste.toLowerCase() : null;
+      if (!t || !SZENEN_TASTEN.includes(t)) {
+        throw fehler(zeile, `braucht szene_starten eine Szenen-Taste in Anführungszeichen: ${SZENEN_TASTEN.map((x) => `"${x}"`).join(', ')}.`);
+      }
+      if (!programm.szenen.has(t)) {
+        throw fehler(zeile, `gibt es die Szene ${t} noch nicht. Lege sie an, zum Beispiel szene("${t}", 1, 2).`);
+      }
+      aktionen.szeneStarten(t);
+    },
+    filter(positionell, benannt, zeile) {
+      const { wert } = angaben('filter', ['wert'], positionell, benannt, zeile);
+      if (typeof wert !== 'number' || wert < 0 || wert > 1) {
+        throw fehler(zeile, 'braucht filter eine Zahl von 0 bis 1. 0 klingt ganz dunkel, 1 ganz hell (offen), zum Beispiel filter(0.3).');
+      }
+      aktionen.filter(wert);
+    },
+    fill(positionell, benannt, zeile) {
+      if (positionell.length > 0 || Object.keys(benannt).length > 0) {
+        throw fehler(zeile, 'braucht fill keine Angaben. Schreibe fill().');
+      }
+      aktionen.fill();
+    },
+    zeige(positionell, benannt, zeile) {
+      if (positionell.length === 0) throw fehler(zeile, 'braucht zeige etwas zum Anzeigen, zum Beispiel zeige(lied).');
+      aktionen.zeige(`Zeile ${zeile}: ${positionell.map(alsText).join(' ')}`);
+    },
+    /** spur in jeder_takt: wirkt im selben Takt; beim Tastendruck ab dem nächsten Takt */
+    spur(positionell, benannt, zeile) {
+      const { nummer, daten } = spurLesen(positionell, benannt, zeile);
+      aktionen.spurSetzen(nummer, daten);
+    },
+  };
+  for (const name of AUFBAU_BEFEHLE) {
+    live[name] = (positionell, benannt, zeile) => {
+      throw fehler(zeile, `wirkt ${name} nur beim Ausführen des Codes, nicht beim Drücken einer Taste.`);
+    };
+  }
+  return live;
 }

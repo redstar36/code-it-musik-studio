@@ -2,9 +2,11 @@
 // Zwei Arten:
 //   ?vorlage=lektion-1   feste Vorlage aus vorlagen.js (kurzer Link, bleibt gültig)
 //   #code=…              der Code steckt im Link selbst (mit „Link kopieren“ erzeugt)
+//   ?stufe=4             zeigt nur die Bedienelemente bis Lektion 4 (KONZEPT.md 3.7)
+//                        Bei ?vorlage=lektion-N… ergibt sich die Stufe N von selbst.
 // Der Teil hinter # wird vom Browser nie an einen Server geschickt – gut für den Datenschutz.
 
-import { VORLAGEN } from './vorlagen.js?v=8d8df3a';
+import { VORLAGEN } from './vorlagen.js?v=880257c';
 
 /** Text → URL-taugliches Base64 (auch Umlaute) */
 function kodieren(text) {
@@ -21,9 +23,27 @@ function dekodieren(kette) {
   return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 }
 
+/**
+ * Stufe aus der Adresszeile (KONZEPT.md 3.7): ?stufe=N, sonst die Zahl aus ?vorlage=lektion-N…
+ * Ohne Angabe sind alle Bedienelemente sichtbar (Infinity).
+ */
+export function stufeAuslesen() {
+  const para = new URLSearchParams(location.search);
+  const direkt = Number(para.get('stufe'));
+  if (Number.isInteger(direkt) && direkt >= 1) return direkt;
+  const treffer = /^lektion-(\d+)/.exec(para.get('vorlage') ?? '');
+  return treffer ? Number(treffer[1]) : Infinity;
+}
+
+/** „?stufe=N“ für Links und die Adresszeile (leer, wenn alles sichtbar ist) */
+function stufeTeil() {
+  const stufe = stufeAuslesen();
+  return Number.isFinite(stufe) ? `?stufe=${stufe}` : '';
+}
+
 /** Link, der genau diesen Code öffnet */
 export function linkFuerCode(code) {
-  return `${location.origin}${location.pathname}#code=${kodieren(code)}`;
+  return `${location.origin}${location.pathname}${stufeTeil()}#code=${kodieren(code)}`;
 }
 
 /** Link zu einer festen Vorlage */
@@ -60,5 +80,5 @@ export function linkAuslesen() {
 
 /** Vorlage/Code aus der Adresszeile entfernen, damit Neuladen nicht wieder überschreibt */
 export function linkEntfernen() {
-  history.replaceState(null, '', location.pathname);
+  history.replaceState(null, '', location.pathname + stufeTeil());
 }

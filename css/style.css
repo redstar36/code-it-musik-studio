@@ -214,6 +214,15 @@ kbd {
 #meldung.wartet  { background: #3a3520; color: #ffe082; }
 #meldung.hinweis { background: #20324a; color: #90caf9; }
 #meldung.fehler  { background: #4a1f24; color: #ffcdd2; }
+#meldung.ausgabe {
+  background: #1f2a3a;
+  color: #e0e0e0;
+  font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  max-height: 8rem;
+  overflow-y: auto;
+}
 
 /* ─── Spur- und Szenenfelder ─── */
 
@@ -361,6 +370,137 @@ kbd {
   cursor: default;
 }
 
+/* ─── Effekte ─── */
+
+.effekte {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.filter-regler {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  color: #ccd;
+}
+
+.filter-regler input { flex: 1; accent-color: var(--accent); }
+
+#filter-wert {
+  min-width: 3.5rem;
+  font-variant-numeric: tabular-nums;
+  color: #aab;
+}
+
+.effekt-knopf {
+  background: var(--bg-light);
+  color: var(--text);
+  border: 2px solid var(--surface);
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.effekt-knopf.blinkt { border-color: #ffd54f; animation: blinken 0.5s steps(1) infinite; }
+.effekt-knopf.an { background: #1e4d2b; border-color: var(--playing); }
+
+.eigene-tasten {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.eigene-tasten:empty { display: none; }
+
+.eigene-tasten button {
+  background: var(--bg-light);
+  color: var(--text);
+  border: 2px solid #7e57c2;
+  border-radius: 8px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.eigene-tasten button b { text-transform: uppercase; margin-right: 0.3rem; }
+
+/* ─── Aufnahme ─── */
+
+.aufnahme {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.aufnahme-knopf {
+  background: var(--bg-light);
+  color: var(--text);
+  border: 2px solid var(--surface);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.aufnahme-knopf:hover { border-color: #e57373; }
+
+.aufnahme-knopf.wartet {
+  border-color: #ffd54f;
+  animation: blinken 0.5s steps(1) infinite;
+}
+
+.aufnahme-knopf.laeuft {
+  background: #b71c1c;
+  border-color: #ef5350;
+  color: #fff;
+}
+
+#aufnahme-status {
+  font-size: 0.9rem;
+  color: #aab;
+  font-variant-numeric: tabular-nums;
+}
+
+.aufnahme-ergebnis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  background: var(--bg-light);
+  border: 1px solid var(--surface);
+}
+
+.aufnahme-ergebnis[hidden] { display: none; }
+
+#aufnahme-info {
+  flex: 1 1 100%;
+  font-size: 0.9rem;
+}
+
+.aufnahme-ergebnis button {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.aufnahme-ergebnis button:hover { background: var(--accent-dim); }
+.aufnahme-ergebnis button:disabled { opacity: 0.5; cursor: wait; }
+
 #tasten-status {
   font-size: 0.85rem;
   color: #889;
@@ -396,3 +536,91 @@ kbd {
     grid-template-columns: 1fr;
   }
 }
+
+/* Beat-Raster unter dem Textfeld (KONZEPT.md 3.8) */
+.beat-raster {
+  background: var(--bg-light);
+  border: 1px solid var(--surface);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+}
+.beat-raster[hidden] { display: none; }
+.raster-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.4rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+  color: #bbc;
+  margin-bottom: 0.5rem;
+}
+.raster-kopf b { color: var(--text); font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace; }
+.raster-hilfe { margin-left: auto; color: #889; font-size: 0.8rem; }
+.raster-reihe {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+.raster-takt { width: 3.6rem; flex: none; font-size: 0.75rem; color: #889; }
+.raster-zelle {
+  flex: 1;
+  min-width: 0;
+  height: 1.9rem;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid #3a3a60;
+  background: var(--surface);
+  color: #fff;
+  font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.raster-zelle.gruppe { margin-left: 8px; }
+.raster-zelle:hover { border-color: var(--accent-dim); }
+.raster-zelle[data-zeichen="x"] { background: var(--accent-dim); border-color: var(--accent-dim); }
+.raster-zelle[data-zeichen="X"] { background: var(--accent); border-color: var(--accent); color: #0b2433; font-weight: bold; }
+.raster-zelle[data-zeichen="o"] { background: #2e4a66; border-color: #2e4a66; color: #9cc; }
+.raster-zelle.jetzt { outline: 2px solid var(--playing); outline-offset: 1px; }
+.raster-hinweis { margin: 0; font-size: 0.85rem; color: #ffe082; }
+
+/* Melodie-Raster („Piano-Roll“): Zeilen = Tonstufen, Spalten = Schritte */
+.raster-leiste { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.5rem; }
+.raster-taktknopf {
+  background: transparent;
+  color: #bbc;
+  border: 1px solid var(--surface);
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.raster-taktknopf.gewaehlt { border-color: var(--accent); color: var(--text); }
+.raster-hoehe { margin-left: auto; }
+.piano-roll { user-select: none; touch-action: none; }
+.piano-roll .raster-reihe { gap: 0; margin-bottom: 1px; }
+.raster-stufe { width: 1.8rem; flex: none; font-size: 0.75rem; color: #889; text-align: right; padding-right: 0.4rem; }
+.grundton .raster-stufe { color: var(--accent); font-weight: bold; }
+.roll-zelle {
+  flex: 1;
+  min-width: 0;
+  height: 1.15rem;
+  margin-right: 2px;
+  border-radius: 3px;
+  background: var(--surface);
+  color: #0b2433;
+  font-size: 0.7rem;
+  line-height: 1.15rem;
+  text-align: center;
+  font-weight: bold;
+  cursor: pointer;
+}
+.grundton .roll-zelle { background: #313158; }
+.roll-zelle.gruppe { margin-left: 6px; }
+.roll-zelle:hover { outline: 1px solid var(--accent-dim); }
+.roll-zelle.ton { background: var(--accent); }
+.roll-zelle.halten { background: var(--accent-dim); }
+.roll-zelle.jetzt { box-shadow: inset 0 0 0 2px var(--playing); }
+
+/* Stufen (KONZEPT.md 3.7): Elemente, die erst in einer späteren Lektion vorkommen */
+.stufe-aus { display: none !important; }

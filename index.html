@@ -4,21 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Code it! Musik Studio</title>
-  <link rel="stylesheet" href="css/style.css?v=8d8df3a">
+  <link rel="stylesheet" href="css/style.css?v=880257c">
 </head>
 <body>
   <header>
     <h1>Code it! Musik Studio</h1>
     <div class="transport">
       <button id="play-btn">&#9654; Play</button>
-      <div class="modus" role="group" aria-label="Modus">
+      <div class="modus" data-ab="4" role="group" aria-label="Modus">
         <button id="modus-live" class="gewaehlt">Live</button>
         <button id="modus-song">Song</button>
       </div>
-      <button id="export-btn" title="Berechnet deinen Ablauf und speichert ihn als Audiodatei">&#11015; Song als WAV</button>
+      <button id="export-btn" data-ab="12" title="Berechnet deinen Ablauf und speichert ihn als Audiodatei">&#11015; Song als WAV</button>
       <span id="tempo-display">120 BPM</span>
-      <span id="tonart-display">c-dur</span>
-      <span id="position-display">Takt 1 · Schritt 1</span>
+      <span id="tonart-display" data-ab="3">c-dur</span>
+      <span id="position-display" data-ab="2">Takt 1 · Schritt 1</span>
     </div>
   </header>
 
@@ -28,12 +28,13 @@
         <div id="zeilennummern" aria-hidden="true"></div>
         <textarea id="code-editor" spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off"></textarea>
       </div>
+      <div id="beat-raster" class="beat-raster" data-ab="2" hidden></div>
       <div class="editor-leiste">
         <button id="ausfuehren-btn" title="Strg + Enter">Ausführen <kbd>Strg</kbd>+<kbd>Enter</kbd></button>
         <div class="datei-knoepfe">
           <button id="speichern-btn" title="Speichert deinen Code als Textdatei im Download-Ordner">Code speichern</button>
           <button id="oeffnen-btn" title="Öffnet eine Textdatei, die du vorher gespeichert hast">Code öffnen</button>
-          <button id="link-btn" title="Kopiert einen Link, der genau diesen Code öffnet">Link kopieren</button>
+          <button id="link-btn" data-ab="12" title="Kopiert einen Link, der genau diesen Code öffnet">Link kopieren</button>
           <button id="demo-btn" title="Holt den Demo-Track zurück">Demo laden</button>
           <input type="file" id="datei-auswahl" accept=".txt,.py,text/plain" hidden>
         </div>
@@ -45,12 +46,31 @@
       <div id="spur-felder" class="felder spuren"></div>
       <h2>Szenen <span class="tasten-hinweis">Tasten Q W E R T</span></h2>
       <div id="szenen-felder" class="felder szenen"></div>
-      <h2>Ablauf <span class="tasten-hinweis">Song-Modus, jede Szene 4 Takte</span></h2>
-      <div id="ablauf-anzeige" class="ablauf"></div>
+      <h2 data-ab="4">Ablauf <span class="tasten-hinweis">Song-Modus, jede Szene 4 Takte</span></h2>
+      <div id="ablauf-anzeige" class="ablauf" data-ab="4"></div>
+      <h2 data-ab="8">Effekte <span class="tasten-hinweis">Pfeiltasten ↑ ↓<span data-ab="9">, Taste F</span></span></h2>
+      <div class="effekte" data-ab="8">
+        <label class="filter-regler">Filter
+          <input type="range" id="filter-regler" min="0" max="100" value="100" tabindex="-1">
+          <span id="filter-wert">offen</span>
+        </label>
+        <button id="fill-btn" class="effekt-knopf" data-ab="9" tabindex="-1">Fill <kbd>F</kbd></button>
+      </div>
+      <div id="eigene-tasten" class="eigene-tasten" data-ab="8"></div>
+      <h2 data-ab="4">Aufnahme <span class="tasten-hinweis">Taste Enter</span></h2>
+      <div class="aufnahme" data-ab="4">
+        <button id="aufnahme-btn" class="aufnahme-knopf">● Aufnehmen</button>
+        <span id="aufnahme-status"></span>
+      </div>
+      <div id="aufnahme-ergebnis" class="aufnahme-ergebnis" data-ab="4" hidden>
+        <span id="aufnahme-info"></span>
+        <button id="anhoeren-btn">▶ Anhören</button>
+        <button id="aufnahme-wav-btn" data-ab="12">⬇ Als WAV speichern</button>
+      </div>
       <p id="tasten-status"></p>
     </section>
   </main>
 
-  <script type="module" src="js/app.js?v=8d8df3a"></script>
+  <script type="module" src="js/app.js?v=880257c"></script>
 </body>
 </html>

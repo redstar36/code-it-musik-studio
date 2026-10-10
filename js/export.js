@@ -3,47 +3,93 @@
 // berechnet (OfflineAudioContext). Dabei laufen genau dieselben Klänge und dieselbe Gesamtsumme
 // wie beim Abspielen.
 
-import { AudioEngine, summeAufbauen, TAKTE_PRO_TEIL } from './audio-engine.js?v=8d8df3a';
+import { AudioEngine, summeAufbauen, filterFrequenz, TAKTE_PRO_TEIL } from './audio-engine.js?v=880257c';
+import { liveBefehle, ERSTER_TAKT } from './befehle.js?v=880257c';
 
 const ABTASTRATE = 44100;
 const NACHKLANG = 2;          // Sekunden nach dem letzten Takt, damit Becken & Co. ausklingen
 const MAX_SEKUNDEN = 10 * 60; // längere Songs würden zu viel Speicher brauchen
 
-/** Länge des Songs in Sekunden (ohne Nachklang) */
-export function songDauer(programm) {
-  const takte = programm.ablauf.length * TAKTE_PRO_TEIL;
-  return (takte * 16 * 60) / programm.tempo / 4;
+// Ein „Takt“ für die Berechnung: { takt, bpm, tonart, spuren, aktiv }
+// takt ist die Taktnummer seit dem Start (für die richtige Stelle in längeren Mustern).
+
+/**
+ * Die Takte eines Songs aus seinem Ablauf (jede Szene 4 Takte).
+ * Gibt es jeder_takt, wird sie für jeden Takt mitgespielt – in derselben Reihenfolge wie live:
+ * jeder_takt → Szene aus dem Ablauf (am Anfang jedes Teils) → Fill.
+ */
+export function songTakte(programm) {
+  const takte = [];
+  const zustand = { spuren: programm.spuren, aktiv: new Set(programm.spuren.keys()), filter: 1 };
+  for (let takt = 0; takt < programm.ablauf.length * TAKTE_PRO_TEIL; takt++) {
+    let fill = false;
+    if (programm.jederTakt) {
+      const aktionen = {
+        szeneStarten: (t) => { zustand.aktiv = new Set(programm.szenen.get(t).filter((nr) => zustand.spuren.has(nr))); },
+        filter: (wert) => { zustand.filter = wert; },
+        fill: () => { fill = true; },
+        zeige: () => {},
+        spurSetzen: (nr, daten) => {
+          if (!zustand.spuren.has(nr)) zustand.aktiv.add(nr);
+          zustand.spuren = new Map(zustand.spuren).set(nr, daten);
+        },
+      };
+      programm.aufrufen(programm.jederTakt, [takt + ERSTER_TAKT], liveBefehle(programm, aktionen));
+    }
+    if (takt % TAKTE_PRO_TEIL === 0) {
+      const szene = programm.szenen.get(programm.ablauf[takt / TAKTE_PRO_TEIL]) ?? [];
+      zustand.aktiv = new Set(szene.filter((nr) => zustand.spuren.has(nr)));
+    }
+    takte.push({
+      takt,
+      bpm: programm.tempo,
+      tonart: programm.tonart,
+      spuren: zustand.spuren,
+      aktiv: new Set(zustand.aktiv),
+      fill,
+      filter: [{ schritt: 0, wert: zustand.filter }],
+    });
+  }
+  return takte;
+}
+
+/** Dauer von Takten in Sekunden (ohne Nachklang) */
+export function takteDauer(takte) {
+  return takte.reduce((summe, t) => summe + (16 * 60) / t.bpm / 4, 0);
 }
 
 /**
- * Berechnet den Song (Ablauf) und gibt einen AudioBuffer zurück.
+ * Berechnet Takte (Song oder Live-Aufnahme) und gibt einen AudioBuffer zurück.
  * beiFortschritt(prozent) wird zwischendurch aufgerufen (10, 20, … 90).
- * Wirft einen Fehler mit Text, wenn der Song zu lang ist.
+ * Wirft einen Fehler mit Text, wenn es zu lang ist.
  */
-export async function songBerechnen(programm, beiFortschritt = () => {}) {
-  const dauer = songDauer(programm);
+export async function takteBerechnen(takte, beiFortschritt = () => {}) {
+  const dauer = takteDauer(takte);
   if (dauer > MAX_SEKUNDEN) {
-    throw new Error(`Dein Song ist ${Math.round(dauer / 60)} Minuten lang. Speichern geht bis ${MAX_SEKUNDEN / 60} Minuten.`);
+    throw new Error(`Das sind ${Math.round(dauer / 60)} Minuten Musik. Speichern geht bis ${MAX_SEKUNDEN / 60} Minuten.`);
   }
 
   const ctx = new OfflineAudioContext(2, Math.ceil((dauer + NACHKLANG) * ABTASTRATE), ABTASTRATE);
   const engine = new AudioEngine();
   engine.audioCtx = ctx;
   engine.ausgang = summeAufbauen(ctx);
-  engine.setProgramm(programm);
 
-  const start = 0.05;
-  const takte = programm.ablauf.length * TAKTE_PRO_TEIL;
-  for (let takt = 0; takt < takte; takt++) {
-    // Zu Beginn jedes Teils die Szene aus dem Ablauf einschalten (wie im Song-Modus)
-    if (takt % TAKTE_PRO_TEIL === 0) {
-      const szene = programm.szenen.get(programm.ablauf[takt / TAKTE_PRO_TEIL]) ?? [];
-      engine.aktiv = new Set(szene.filter((nr) => programm.spuren.has(nr)));
+  // Jeden Takt mit genau dem Zustand abspielen, der damals galt (Tempo darf sich ändern)
+  let zeit = 0.05;
+  for (const t of takte) {
+    engine.bpm = t.bpm;
+    engine.tonart = t.tonart;
+    engine.spuren = t.spuren;
+    engine.aktiv = t.aktiv;
+    engine.currentBar = t.takt;
+    engine.fillAktiv = !!t.fill;
+    for (const { schritt, wert } of t.filter ?? []) {
+      engine.ausgang.filterKnoten.frequency.setTargetAtTime(filterFrequenz(wert), zeit + schritt * engine.stepDuration, 0.04);
     }
-    engine.currentBar = takt;
     for (let schritt = 0; schritt < 16; schritt++) {
-      engine._playStep(schritt, start + (takt * 16 + schritt) * engine.stepDuration);
+      engine._playStep(schritt, zeit + schritt * engine.stepDuration);
     }
+    zeit += 16 * engine.stepDuration;
   }
 
   // Fortschritt: Berechnung bei jedem Zehntel kurz anhalten, melden und weiterlaufen lassen.
@@ -58,6 +104,11 @@ export async function songBerechnen(programm, beiFortschritt = () => {}) {
   }
 
   return ctx.startRendering();
+}
+
+/** Den Song (Ablauf) berechnen */
+export function songBerechnen(programm, beiFortschritt) {
+  return takteBerechnen(songTakte(programm), beiFortschritt);
 }
 
 /** AudioBuffer → WAV-Datei (16 Bit, Stereo) */
