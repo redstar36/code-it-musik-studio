@@ -1,9 +1,9 @@
 // befehle.js – die Funktionen, die Kinder in ihrem Code benutzen können.
 // Jeder Befehl prüft seine Angaben und meldet Fehler auf Deutsch mit Zeilenangabe.
 
-import { ausfuehren, fehler, aehnlichstes, Funktion } from './interpreter.js?v=880257c';
-import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=880257c';
-import { leseTonart, STANDARD_TONART } from './tonart.js?v=880257c';
+import { ausfuehren, fehler, aehnlichstes, Funktion } from './interpreter.js?v=b387a8e';
+import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=b387a8e';
+import { leseTonart, STANDARD_TONART } from './tonart.js?v=b387a8e';
 
 const SCHRITTE_PRO_TAKT = 16;
 const MAX_TAKTE = 4;
@@ -284,9 +284,9 @@ function leseMelodieListe(liste, laenge, zeile, akkorde = false) {
   return schritte;
 }
 
-/** Oktave prüfen; ohne Angabe gilt die Standard-Oktave des Instruments */
-function pruefeOktave(oktave, klang, zeile) {
-  if (oktave === undefined) return INSTRUMENTE[klang].oktave;
+/** Oktave prüfen; ohne Angabe gilt die Standard-Oktave des Instruments (bei Akkorden ggf. eine eigene) */
+function pruefeOktave(oktave, klang, zeile, akkord = false) {
+  if (oktave === undefined) return (akkord && INSTRUMENTE[klang].akkordOktave) || INSTRUMENTE[klang].oktave;
   if (!istGanzeZahl(oktave) || oktave < 1 || oktave > 7) {
     throw fehler(zeile, 'muss oktave eine ganze Zahl von 1 bis 7 sein. Kleine Zahlen klingen tief, große hoch.');
   }
@@ -443,7 +443,7 @@ export function programmAusfuehren(code) {
       // Typischer Fall: drei Akkorde zu je einem Takt
       const extra = folge.length === 3 && laengeWert === SCHRITTE_PRO_TAKT ? ' Probier einen vierten Akkord!' : '';
       schritte = aufVierTakte(schritte, 'deine Akkordfolge', zeile, extra);
-      return new Baustein('melodie', schritte, klang, pruefeOktave(oktave, klang, zeile));
+      return new Baustein('melodie', schritte, klang, pruefeOktave(oktave, klang, zeile, true));
     },
 
     /** Zufälliges Element einer Liste (Lektion 7). Bei jedem Ausführen wird neu gewürfelt. */

@@ -6,7 +6,7 @@
 //                        Bei ?vorlage=lektion-N… ergibt sich die Stufe N von selbst.
 // Der Teil hinter # wird vom Browser nie an einen Server geschickt – gut für den Datenschutz.
 
-import { VORLAGEN } from './vorlagen.js?v=880257c';
+import { VORLAGEN } from './vorlagen.js?v=b387a8e';
 
 /** Text → URL-taugliches Base64 (auch Umlaute) */
 function kodieren(text) {
@@ -41,6 +41,16 @@ function stufeTeil() {
   return Number.isFinite(stufe) ? `?stufe=${stufe}` : '';
 }
 
+/**
+ * Link zu einer Seite des Werkzeugs mit eingebautem Code, z. B. aus der Ideen-Werkstatt ins Studio.
+ * stufe: Zahl oder Infinity (dann ohne ?stufe), von: woher der Code kommt (für die Meldung)
+ */
+export function codeLinkFuer(code, seite, stufe, von) {
+  const basis = location.pathname.replace(/[^/]*$/, '') + seite;
+  const stufeText = Number.isFinite(stufe) ? `?stufe=${stufe}` : '';
+  return `${location.origin}${basis}${stufeText}#code=${kodieren(code)}${von ? `&von=${von}` : ''}`;
+}
+
 /** Link, der genau diesen Code öffnet */
 export function linkFuerCode(code) {
   return `${location.origin}${location.pathname}${stufeTeil()}#code=${kodieren(code)}`;
@@ -61,7 +71,8 @@ export function linkAuslesen() {
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.has('code')) {
     try {
-      return { code: dekodieren(hash.get('code')), beschreibung: 'den Code aus dem Link' };
+      const beschreibung = hash.get('von') === 'werkstatt' ? 'deine Idee aus der Ideen-Werkstatt' : 'den Code aus dem Link';
+      return { code: dekodieren(hash.get('code')), beschreibung };
     } catch {
       return { fehler: 'Der Link ist leider unvollständig. Vielleicht wurde er beim Kopieren abgeschnitten.' };
     }

@@ -9,6 +9,39 @@ const REIHUM = ['.', 'x', 'X', 'o'];
 const BEAT_ERLAUBT = /^[.xXo ]*$/;
 const HOECHSTE_STUFE = 14;
 
+// ─── Hilfen für Melodien (auch für die Ideen-Werkstatt) ───
+// Schritte: Liste mit null (Pause) oder { s: Stufe, start: true/false }
+
+/** Schritte → Melodie-Text, in Vierergruppen; zwischen zwei Zahlen steht immer ein Leerzeichen */
+export function melodieSchreiben(schritte) {
+  let text = '';
+  let davorZahl = false;
+  schritte.forEach((x, i) => {
+    const zeichen = x === null ? '.' : x.start ? String(x.s) : '-';
+    const istZahl = x !== null && x.start;
+    if (i > 0 && (i % 4 === 0 || (davorZahl && istZahl))) text += ' ';
+    text += zeichen;
+    davorZahl = istZahl;
+  });
+  return text;
+}
+
+/** Ton von a bis b (Stufe s) setzen; ein Rest eines überschriebenen Tons wird ein eigener Ton */
+export function tonSetzen(alt, a, b, s) {
+  const neu = alt.slice();
+  for (let j = a; j <= b; j++) neu[j] = { s, start: j === a };
+  if (neu[b + 1] && !neu[b + 1].start) neu[b + 1] = { s: neu[b + 1].s, start: true };
+  return neu;
+}
+
+/** Ab Schritt a bis zum Ende des Tons Pause setzen (löschen oder kürzen) */
+export function tonEntfernenAb(alt, a) {
+  const neu = alt.slice();
+  neu[a] = null;
+  for (let j = a + 1; j < neu.length && neu[j] && !neu[j].start; j++) neu[j] = null;
+  return neu;
+}
+
 /**
  * editor:        das Textfeld
  * bereich:       das Element unter dem Textfeld, in das das Raster gezeichnet wird
@@ -209,36 +242,6 @@ export function rasterEinrichten(editor, bereich, stufe, nachAenderung) {
       return { hinweis: `Die Melodie hat ${schritte.length} Schritte. Für das Raster braucht es 16 Schritte pro Takt (16, 32, 48 oder 64).` };
     }
     return { schritte };
-  }
-
-  /** Schritte → Melodie-Text, in Vierergruppen; zwischen zwei Zahlen steht immer ein Leerzeichen */
-  function melodieSchreiben(schritte) {
-    let text = '';
-    let davorZahl = false;
-    schritte.forEach((x, i) => {
-      const zeichen = x === null ? '.' : x.start ? String(x.s) : '-';
-      const istZahl = x !== null && x.start;
-      if (i > 0 && (i % 4 === 0 || (davorZahl && istZahl))) text += ' ';
-      text += zeichen;
-      davorZahl = istZahl;
-    });
-    return text;
-  }
-
-  /** Ton von a bis b (Stufe s) setzen; ein Rest eines überschriebenen Tons wird ein eigener Ton */
-  function tonSetzen(alt, a, b, s) {
-    const neu = alt.slice();
-    for (let j = a; j <= b; j++) neu[j] = { s, start: j === a };
-    if (neu[b + 1] && !neu[b + 1].start) neu[b + 1] = { s: neu[b + 1].s, start: true };
-    return neu;
-  }
-
-  /** Ab Schritt a bis zum Ende des Tons Pause setzen (löschen oder kürzen) */
-  function tonEntfernenAb(alt, a) {
-    const neu = alt.slice();
-    neu[a] = null;
-    for (let j = a + 1; j < neu.length && neu[j] && !neu[j].start; j++) neu[j] = null;
-    return neu;
   }
 
   function melodieZeichnen(m) {

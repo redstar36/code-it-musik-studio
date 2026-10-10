@@ -3,8 +3,8 @@
 // berechnet (OfflineAudioContext). Dabei laufen genau dieselben Klänge und dieselbe Gesamtsumme
 // wie beim Abspielen.
 
-import { AudioEngine, summeAufbauen, filterFrequenz, TAKTE_PRO_TEIL } from './audio-engine.js?v=880257c';
-import { liveBefehle, ERSTER_TAKT } from './befehle.js?v=880257c';
+import { AudioEngine, summeAufbauen, filterFrequenz, TAKTE_PRO_TEIL } from './audio-engine.js?v=b387a8e';
+import { liveBefehle, ERSTER_TAKT } from './befehle.js?v=b387a8e';
 
 const ABTASTRATE = 44100;
 const NACHKLANG = 2;          // Sekunden nach dem letzten Takt, damit Becken & Co. ausklingen

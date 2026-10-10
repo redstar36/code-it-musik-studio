@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ideen-Werkstatt · Code it! Musik Studio</title>
+  <link rel="stylesheet" href="css/style.css?v=b387a8e">
+</head>
+<body class="werkstatt-seite">
+  <header>
+    <h1>Ideen-Werkstatt</h1>
+    <div class="transport">
+      <button id="play-btn">&#9654; Play</button>
+      <label class="ws-regler">Tempo
+        <input type="range" id="ws-tempo" min="60" max="180" step="1" value="100">
+        <span id="ws-tempo-wert">100</span>
+      </label>
+      <label class="ws-regler">Tonart
+        <select id="ws-grundton"></select>
+        <select id="ws-leiter">
+          <option value="dur">dur</option>
+          <option value="moll">moll</option>
+        </select>
+      </label>
+    </div>
+    <div class="ws-knoepfe">
+      <button id="ws-neu" title="Alle Raster leeren">Neu anfangen</button>
+      <button id="ws-studio" class="ws-hauptknopf" title="Öffnet das Musik Studio mit diesem Code">Ins Studio übernehmen &#10132;</button>
+    </div>
+  </header>
+
+  <main class="ws-main">
+    <section class="ws-raster">
+      <p class="ws-einleitung">Hier skizzierst du schnell eine Idee. Klick in die Kästchen und hör zu. Rechts siehst du den Code, der dabei entsteht. Fertig machen, live spielen und aufnehmen kannst du deine Idee im Studio.</p>
+
+      <div class="ws-karte">
+        <h2>Schlagzeug <span class="tasten-hinweis">1 Takt · Klick: Pause → x → X → o</span></h2>
+        <div id="ws-schlagzeug"></div>
+      </div>
+
+      <div class="ws-karte">
+        <h2>Bass <span class="tasten-hinweis">2 Takte · Klick setzt oder löscht einen Ton, Ziehen macht ihn länger</span></h2>
+        <div class="ws-klangwahl">Klang <select id="ws-bass-klang"></select></div>
+        <div id="ws-bass"></div>
+      </div>
+
+      <div class="ws-karte">
+        <h2>Akkorde <span class="tasten-hinweis">4 Takte, ein Akkord pro Takt · Klick setzt oder löscht einen Akkord</span></h2>
+        <div class="ws-klangwahl">Klang <select id="ws-akkorde-klang"></select></div>
+        <div id="ws-akkorde"></div>
+        <p id="ws-akkorde-hinweis" class="raster-hinweis" hidden></p>
+      </div>
+
+      <div class="ws-karte">
+        <h2>Melodie <span class="tasten-hinweis">2 Takte · Klick setzt oder löscht einen Ton, Ziehen macht ihn länger</span></h2>
+        <div class="ws-klangwahl">Klang <select id="ws-melodie-klang"></select>
+          <button id="ws-hoch" class="raster-taktknopf">Höhere Töne (9 bis 14)</button>
+        </div>
+        <div id="ws-melodie"></div>
+      </div>
+    </section>
+
+    <section class="ws-code">
+      <h2>Dein Code</h2>
+      <pre id="ws-code-text"></pre>
+      <div id="meldung" role="status"></div>
+    </section>
+  </main>
+
+  <script type="module" src="js/werkstatt.js?v=b387a8e"></script>
+</body>
+</html>

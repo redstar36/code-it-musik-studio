@@ -1,13 +1,13 @@
 // app.js – UI-Logik: Code ausführen, Play/Stop, Meldungen, Live-Steuerung
 
-import { AudioEngine, TAKTE_PRO_TEIL } from './audio-engine.js?v=880257c';
-import { programmAusfuehren, liveBefehle, SZENEN_TASTEN, ERSTER_TAKT } from './befehle.js?v=880257c';
-import { CodeFehler } from './interpreter.js?v=880257c';
-import { DEMO_TRACK } from './vorlagen.js?v=880257c';
-import { songBerechnen, takteBerechnen, wavErzeugen, dateiname, herunterladen } from './export.js?v=880257c';
-import { codeLaden, codeMerken, codeAlsDatei, dateiLesen } from './speicher.js?v=880257c';
-import { linkAuslesen, linkEntfernen, linkFuerCode, stufeAuslesen } from './links.js?v=880257c';
-import { rasterEinrichten } from './raster.js?v=880257c';
+import { AudioEngine, TAKTE_PRO_TEIL } from './audio-engine.js?v=b387a8e';
+import { programmAusfuehren, liveBefehle, SZENEN_TASTEN, ERSTER_TAKT } from './befehle.js?v=b387a8e';
+import { CodeFehler } from './interpreter.js?v=b387a8e';
+import { DEMO_TRACK } from './vorlagen.js?v=b387a8e';
+import { songBerechnen, takteBerechnen, wavErzeugen, dateiname, herunterladen } from './export.js?v=b387a8e';
+import { codeLaden, codeMerken, codeAlsDatei, dateiLesen } from './speicher.js?v=b387a8e';
+import { linkAuslesen, linkEntfernen, linkFuerCode, stufeAuslesen } from './links.js?v=b387a8e';
+import { rasterEinrichten } from './raster.js?v=b387a8e';
 
 const engine = new AudioEngine();
 
@@ -415,6 +415,11 @@ document.getElementById('link-btn').addEventListener('click', async () => {
     // Manche Browser erlauben das Kopieren nicht – dann zum Selbstkopieren anzeigen
     prompt('Kopiere diesen Link (Strg+C):', link);
   }
+});
+
+// Ideen-Werkstatt (KONZEPT.md 3.10, ab Stufe 11); der Code im Studio bleibt gemerkt
+document.getElementById('werkstatt-btn').addEventListener('click', () => {
+  location.href = 'werkstatt.html' + (Number.isFinite(stufe) ? `?stufe=${stufe}` : '');
 });
 
 document.getElementById('demo-btn').addEventListener('click', () => {

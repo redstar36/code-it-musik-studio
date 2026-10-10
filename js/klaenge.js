@@ -37,26 +37,60 @@ function huellkurve(ctx, time, dauer, volume, einschwingen, ausklingen) {
 // ─── Schlagzeug ──────────────────────────────────────────
 // Jeder Klang: (ctx, zeit, symbol, ausgang, lautstaerke 0–1)
 
-/** Synthetische Kick-Drum */
+// Sättigung für die Kick: rundet den Sinus etwas ab, dadurch entstehen Obertöne,
+// die man auch auf kleinen Lautsprechern hört (ein reiner 40–150-Hz-Sinus geht dort unter)
+let kickKurve = null;
+function kickSaettigung(ctx) {
+  if (!kickKurve) {
+    kickKurve = new Float32Array(1024);
+    for (let i = 0; i < kickKurve.length; i++) {
+      const x = (i / (kickKurve.length - 1)) * 2 - 1;
+      kickKurve[i] = Math.tanh(2.5 * x) / Math.tanh(2.5);
+    }
+  }
+  const formen = ctx.createWaveShaper();
+  formen.curve = kickKurve;
+  return formen;
+}
+
+/**
+ * Synthetische Kick-Drum: Sinus mit fallender Tonhöhe, leicht gesättigt, dazu ein kurzer Klick.
+ * Klick und Sättigung sorgen dafür, dass die Kick neben einem Bass nicht untergeht.
+ */
 function kick(ctx, time, symbol, ausgang, lautstaerke) {
   const volume = anschlag(symbol) * lautstaerke;
 
-  // Oszillator: Frequenz-Sweep von 150Hz nach 40Hz
+  // Körper: Frequenz-Sweep von 160 Hz nach 45 Hz
   const osc = ctx.createOscillator();
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(150, time);
-  osc.frequency.exponentialRampToValueAtTime(40, time + 0.08);
+  osc.frequency.setValueAtTime(160, time);
+  osc.frequency.exponentialRampToValueAtTime(45, time + 0.08);
 
-  // Lautstärke-Hüllkurve
+  // Erst sättigen, dann die Lautstärke formen (die Sättigung arbeitet immer mit vollem Pegel)
+  const saettigung = kickSaettigung(ctx);
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(volume, time);
-  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
-
-  osc.connect(gain);
+  gain.gain.setValueAtTime(volume * 1.6, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.32);
+  osc.connect(saettigung);
+  saettigung.connect(gain);
   gain.connect(ausgang);
-
   osc.start(time);
-  osc.stop(time + 0.3);
+  osc.stop(time + 0.32);
+
+  // Klick: sehr kurzer, heller Anschlag (wie der Schlägel auf dem Fell)
+  const klick = rauschen(ctx);
+  const band = ctx.createBiquadFilter();
+  band.type = 'bandpass';
+  band.frequency.value = 3000;
+  band.Q.value = 0.8;
+  const klickGain = ctx.createGain();
+  klickGain.gain.setValueAtTime(volume * 0.6, time);
+  klickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.012);
+  klick.connect(band);
+  band.connect(klickGain);
+  klickGain.connect(ausgang);
+  klick.start(time);
+  klick.stop(time + 0.015);
 }
 
 /** Synthetische Snare: Rauschen (Schnarren) + kurzer Ton (Fell) */
@@ -280,7 +314,7 @@ export const SCHLAGZEUG = { kick, snare, hihat, openhat, clap, rim, tom, becken,
 
 /** Synth-Bass: zwei leicht verstimmte Oszillatoren durch ein Tiefpassfilter, das sich schließt */
 function synbass(ctx, time, freq, dauer, ausgang, lautstaerke) {
-  const volume = 0.45 * lautstaerke;
+  const volume = 0.32 * lautstaerke;   // vorher 0.45: übertönte die Kick (Oktober 2026)
   const ende = time + dauer + 0.06;
 
   const osc1 = ctx.createOscillator();
@@ -398,17 +432,51 @@ function pad(ctx, time, freq, dauer, ausgang, lautstaerke) {
   for (const cent of [-9, 0, 9]) osz(ctx, 'sawtooth', freq, time, ende, filter, cent);
 }
 
-/** E-Piano: glockiger Anschlag, der weicher wird (FM-Synthese) */
-function epiano(ctx, time, freq, dauer, ausgang, lautstaerke) {
-  const volume = 0.8 * lautstaerke;
+// Wiederholte Töne: Kommt derselbe Ton noch einmal, während der alte noch nachklingt,
+// wird der alte ganz kurz ausgeblendet (wie bei einer echten Taste, die neu angeschlagen wird).
+// Sonst überlagern sich zwei gleich hohe Töne und klingen unsauber.
+const stimmen = new WeakMap();   // ausgang → Map(„Instrument:Frequenz“ → { knoten, ende })
+function stimme(ctx, name, freq, time, ausgang) {
+  if (!stimmen.has(ausgang)) stimmen.set(ausgang, new Map());
+  const liste = stimmen.get(ausgang);
+  const schluessel = `${name}:${freq.toFixed(2)}`;
+  const alt = liste.get(schluessel);
+  if (alt && alt.ende > time) {
+    alt.knoten.gain.setValueAtTime(1, time);
+    alt.knoten.gain.linearRampToValueAtTime(0, time + 0.012);
+  }
+  const knoten = ctx.createGain();
+  knoten.connect(ausgang);
+  const eintrag = { knoten, ende: Infinity };
+  liste.set(schluessel, eintrag);
+  return eintrag;
+}
+
+/**
+ * E-Piano: glockiger Anschlag, der weicher wird (FM-Synthese).
+ * Im Akkord: weicherer Anschlag und schnelleres Abklingen, sonst klingen drei helle Töne
+ * zusammen metallisch und „scheppern“ über den ganzen Takt.
+ */
+function epiano(ctx, time, freq, dauer, ausgang, lautstaerke, optionen = {}) {
+  const akkord = !!optionen.akkord;
+  const volume = 0.38 * lautstaerke;   // vorher 0.8: Melodien übertönten das Schlagzeug (Oktober 2026)
   const halten = Math.max(dauer, 0.05);
   const ende = time + halten + 0.2;
+  const s = stimme(ctx, 'epiano', freq, time, ausgang);
+  s.ende = ende;
+  ausgang = s.knoten;
 
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(0, time);
   gain.gain.linearRampToValueAtTime(volume, time + 0.005);
   // exponentielle Rampen dürfen nicht bei 0 enden (z. B. bei lautstaerke=0)
-  gain.gain.exponentialRampToValueAtTime(Math.max(volume * 0.3, 0.0001), time + halten + 0.001);
+  if (akkord) {
+    // wie ein echtes E-Piano: nach etwa einer Sekunde deutlich leiser, dann langsam weiter
+    gain.gain.exponentialRampToValueAtTime(Math.max(volume * 0.35, 0.0001), time + Math.min(halten, 1));
+    gain.gain.exponentialRampToValueAtTime(Math.max(volume * 0.15, 0.0001), time + halten + 0.001);
+  } else {
+    gain.gain.exponentialRampToValueAtTime(Math.max(volume * 0.3, 0.0001), time + halten + 0.001);
+  }
   gain.gain.linearRampToValueAtTime(0, ende);
   gain.connect(ausgang);
 
@@ -416,8 +484,10 @@ function epiano(ctx, time, freq, dauer, ausgang, lautstaerke) {
   const mod = ctx.createOscillator();
   mod.frequency.value = freq;
   const modStaerke = ctx.createGain();
-  modStaerke.gain.setValueAtTime(freq * 1.8, time);
-  modStaerke.gain.exponentialRampToValueAtTime(freq * 0.35, time + 0.6);
+  // Hohe Töne weniger hell anschlagen, sonst werden sie spitz und metallisch
+  const helligkeit = Math.min(1, Math.sqrt(400 / freq));
+  modStaerke.gain.setValueAtTime(freq * (akkord ? 1.0 : 1.8) * helligkeit, time);
+  modStaerke.gain.exponentialRampToValueAtTime(freq * (akkord ? 0.15 : 0.35) * helligkeit, time + (akkord ? 0.4 : 0.6));
   mod.connect(modStaerke);
   modStaerke.connect(traeger.frequency);
   mod.start(time);
@@ -510,20 +580,26 @@ function streicher(ctx, time, freq, dauer, ausgang, lautstaerke) {
 }
 
 /** Flöte: fast reiner Ton mit einem kurzen Luftstoß beim Anblasen */
-function floete(ctx, time, freq, dauer, ausgang, lautstaerke) {
+function floete(ctx, time, freq, dauer, ausgang, lautstaerke, optionen = {}) {
+  // Im Akkord ohne Vibrato und mit weniger Obertönen: Sonst reiben sich die Obertöne
+  // der drei Töne aneinander, und das Vibrato lässt den Akkord wabern („Hall“, „Scheppern“).
+  const akkord = !!optionen.akkord;
   const ende = time + dauer + 0.1;
-  const gain = huellkurve(ctx, time, dauer, 0.32 * lautstaerke, 0.05, 0.08);
+  const s = stimme(ctx, 'floete', freq, time, ausgang);
+  s.ende = ende;
+  ausgang = s.knoten;
+  const gain = huellkurve(ctx, time, dauer, 0.14 * lautstaerke, 0.05, 0.08);   // vorher 0.32: übertönte das Schlagzeug (Oktober 2026)
   gain.connect(ausgang);
   const grund = osz(ctx, 'sine', freq, time, ende, gain);
   const oberGain = ctx.createGain();
-  oberGain.gain.value = 0.3;
+  oberGain.gain.value = akkord ? 0.15 : 0.3;
   oberGain.connect(gain);
   const ober = osz(ctx, 'sine', freq * 2, time, ende, oberGain);
   const ober3Gain = ctx.createGain();
-  ober3Gain.gain.value = 0.05;
+  ober3Gain.gain.value = akkord ? 0 : 0.05;
   ober3Gain.connect(gain);
   const ober3 = osz(ctx, 'sine', freq * 3, time, ende, ober3Gain);
-  vibrato(ctx, [grund, ober, ober3], time, ende, 8);
+  if (!akkord) vibrato(ctx, [grund, ober, ober3], time, ende, 8);
 
   // Anblasen: kurzer, leiser Luftstoß nur am Tonanfang (kein Dauerrauschen)
   const atem = rauschen(ctx);
@@ -544,7 +620,7 @@ function floete(ctx, time, freq, dauer, ausgang, lautstaerke) {
 /** Subbass: sehr tiefer, runder Bass – eher zu spüren als zu hören */
 function subbass(ctx, time, freq, dauer, ausgang, lautstaerke) {
   const ende = time + dauer + 0.06;
-  const gain = huellkurve(ctx, time, dauer, 0.7 * lautstaerke, 0.005, 0.05);
+  const gain = huellkurve(ctx, time, dauer, 0.5 * lautstaerke, 0.005, 0.05);   // vorher 0.7
   gain.connect(ausgang);
   osz(ctx, 'sine', freq, time, ende, gain);
   // Obertöne, damit der Bass auch auf kleinen Lautsprechern zu hören ist
@@ -593,21 +669,28 @@ function supersaw(ctx, time, freq, dauer, ausgang, lautstaerke) {
   for (const cent of [-22, -11, 0, 11, 22]) osz(ctx, 'sawtooth', freq, time, ende, filter, cent);
 }
 
-/** Instrumente mit ihrer Standard-Oktave (gilt, wenn im Code keine oktave= steht) */
+/**
+ * Instrumente mit ihrer Standard-Oktave (gilt, wenn im Code keine oktave= steht).
+ * akkord: Lautstärke-Faktor für Akkorde. Klänge, die lange gleich laut weiterklingen (E-Piano, Flöte,
+ * Orgel …), sind als Dreiklang über einen ganzen Takt viel lauter als eine Fläche. Gemessen wurde der
+ * Effektivwert eines Dreiklangs über einen Takt; Ziel ist etwa 0,12 (pad liegt bei 0,09). Fehlt der Wert, gilt 1.
+ * akkordOktave: Standard-Oktave für akkorde (ohne oktave=). Melodie-Instrumente liegen sonst für Akkorde
+ * zu hoch; in a-moll läge ein Akkord auf Stufe 6 schon bei f5 bis c6 und klänge schrill.
+ */
 export const INSTRUMENTE = {
-  synbass:   { spielen: synbass,   oktave: 2 },
-  subbass:   { spielen: subbass,   oktave: 2 },
-  acid:      { spielen: acid,      oktave: 2 },
-  marimba:   { spielen: marimba,   oktave: 4 },
-  lead:      { spielen: lead,      oktave: 4 },
-  chip:      { spielen: chip,      oktave: 4 },
-  pluck:     { spielen: pluck,     oktave: 4 },
-  epiano:    { spielen: epiano,    oktave: 4 },
-  orgel:     { spielen: orgel,     oktave: 4 },
+  synbass:   { spielen: synbass,   oktave: 2, akkord: 0.39 },
+  subbass:   { spielen: subbass,   oktave: 2, akkord: 0.35 },
+  acid:      { spielen: acid,      oktave: 2, akkord: 0.59 },
+  marimba:   { spielen: marimba,   oktave: 4, akkordOktave: 3 },
+  lead:      { spielen: lead,      oktave: 4, akkord: 0.78, akkordOktave: 3 },
+  chip:      { spielen: chip,      oktave: 4, akkordOktave: 3 },
+  pluck:     { spielen: pluck,     oktave: 4, akkordOktave: 3 },
+  epiano:    { spielen: epiano,    oktave: 4, akkord: 1.03, akkordOktave: 3 },
+  orgel:     { spielen: orgel,     oktave: 4, akkord: 0.69, akkordOktave: 3 },
   pad:       { spielen: pad,       oktave: 3 },
   streicher: { spielen: streicher, oktave: 3 },
-  brass:     { spielen: brass,     oktave: 4 },
-  supersaw:  { spielen: supersaw,  oktave: 4 },
-  floete:    { spielen: floete,    oktave: 4 },
+  brass:     { spielen: brass,     oktave: 4, akkordOktave: 3 },
+  supersaw:  { spielen: supersaw,  oktave: 4, akkordOktave: 3 },
+  floete:    { spielen: floete,    oktave: 4, akkord: 1.3, akkordOktave: 3 },
   glocke:    { spielen: glocke,    oktave: 5 },
 };

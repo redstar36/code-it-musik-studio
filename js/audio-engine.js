@@ -1,8 +1,8 @@
 // audio-engine.js – Lookahead-Scheduler und Klangerzeugung
 // Basiert auf Chris Wilsons "A Tale of Two Clocks"
 
-import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=880257c';
-import { frequenz, STANDARD_TONART } from './tonart.js?v=880257c';
+import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=b387a8e';
+import { frequenz, STANDARD_TONART } from './tonart.js?v=b387a8e';
 
 /** Im Song-Modus spielt jeder Eintrag des Ablaufs so viele Takte */
 export const TAKTE_PRO_TEIL = 4;
@@ -73,6 +73,12 @@ export function filterFrequenz(wert) {
 }
 
 /** Trommelwirbel für fill(): Snare und Tom im zweiten Teil des Takts, lauter werdend */
+// Sidechain: Bei jeder Kick werden Töne unter TIEF_GRENZE (Hz) kurz auf DUCK_TIEF abgesenkt,
+// alle anderen Töne (Akkorde, Melodien) etwas weniger stark auf DUCK_MITTE
+const TIEF_GRENZE = 200;
+const DUCK_TIEF = 0.35;
+const DUCK_MITTE = 0.5;
+
 export const FILL_MUSTER = {
   snare: '........x.o.xxXX',
   tom: '..........x.x.x.',
@@ -301,6 +307,8 @@ export class AudioEngine {
       setTimeout(() => this.onStep(step, bar), verzoegerung);
     }
 
+    const { tief: tiefBus, mitte: mitteBus } = this._duckBusse();
+
     // Gemeinsame Uhr: Position im Muster ergibt sich aus Takt und Schritt.
     // Kürzere Muster wiederholen sich automatisch.
     const gesamtSchritt = this.currentBar * 16 + step;
@@ -317,18 +325,51 @@ export class AudioEngine {
       if (spur.art === 'beat') {
         if (ereignis !== '.') {
           SCHLAGZEUG[spur.klang](this.audioCtx, time, ereignis, this.ausgang, spur.lautstaerke);
+          if (spur.klang === 'kick') {
+            this._ducken(tiefBus, DUCK_TIEF, time);
+            this._ducken(mitteBus, DUCK_MITTE, time);
+          }
         }
       } else if (ereignis) {
         // Ein Ereignis kann mehrere Töne haben (Akkord). Dann jeden Ton etwas leiser,
-        // damit ein Akkord nicht dreimal so laut ist wie ein einzelner Ton.
+        // damit ein Akkord nicht dreimal so laut ist wie ein einzelner Ton. Lang klingende
+        // Instrumente bekommen bei Akkorden zusätzlich ihren eigenen Faktor (klaenge.js).
         const dauer = ereignis.dauer * this.stepDuration;
-        const lautstaerke = spur.lautstaerke / Math.sqrt(ereignis.stufen.length);
+        const anzahl = ereignis.stufen.length;
+        const akkordFaktor = anzahl > 1 ? (INSTRUMENTE[spur.klang].akkord ?? 1) : 1;
+        const lautstaerke = spur.lautstaerke / Math.sqrt(anzahl) * akkordFaktor;
         for (const stufe of ereignis.stufen) {
           const freq = frequenz(this.tonart, spur.oktave, stufe);
-          INSTRUMENTE[spur.klang].spielen(this.audioCtx, time, freq, dauer, this.ausgang, lautstaerke);
+          // Alle Töne laufen über Busse, die bei jeder Kick kurz leiser werden (tiefe stärker)
+          const ziel = freq < TIEF_GRENZE ? tiefBus : mitteBus;
+          // Hohe Akkordtöne etwas leiser: Das Ohr hört hohe Töne lauter als tiefe
+          const hoehe = anzahl > 1 ? Math.min(1, Math.sqrt(400 / freq)) : 1;
+          INSTRUMENTE[spur.klang].spielen(this.audioCtx, time, freq, dauer, ziel, lautstaerke * hoehe, { akkord: anzahl > 1 });
         }
       }
     }
+  }
+
+  /**
+   * Busse für Instrumente (tief und mitte). Bei jedem Kick-Schlag werden sie kurz leiser
+   * („Sidechain“ wie in Drum & Bass und House), damit die Kick nicht in Bass, Akkorden und
+   * Melodie untergeht. Pro Ausgang je einer (auch beim WAV-Berechnen).
+   */
+  _duckBusse() {
+    if (!this._busse || this._busse.ziel !== this.ausgang) {
+      const tief = this.audioCtx.createGain();
+      const mitte = this.audioCtx.createGain();
+      tief.connect(this.ausgang);
+      mitte.connect(this.ausgang);
+      this._busse = { tief, mitte, ziel: this.ausgang };
+    }
+    return this._busse;
+  }
+
+  /** Bus ab time schnell auf tiefe absenken und in gut 0,1 s wieder hochfahren */
+  _ducken(bus, tiefe, time) {
+    bus.gain.setTargetAtTime(tiefe, time, 0.004);
+    bus.gain.setTargetAtTime(1, time + 0.04, 0.05);
   }
 
   /** Schritt weiterzählen */
