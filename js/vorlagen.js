@@ -92,17 +92,8 @@ spur(1, beat("x... .... x... ....", klang="kick"))
 spur(2, beat(".... x... .... x...", klang="snare"))
 `;
 
+/** Schritt 4: Spur 1 steht absichtlich zweimal – die untere Zeile gewinnt */
 const LEKTION_2_SCHRITT_4 = `# Mein Beat
-
-tempo(120)
-
-spur(1, beat("x... .... x... ....", klang="kick"))
-spur(2, beat(".... x... .... x...", klang="snare"))
-spur(3, beat("x.x. x.x. x.x. x.x.", klang="hihat"))
-`;
-
-/** Schritt 5: Spur 1 steht absichtlich zweimal – die untere Zeile gewinnt */
-const LEKTION_2_SCHRITT_5 = `# Mein Beat
 
 tempo(120)
 
@@ -112,7 +103,7 @@ spur(3, beat("x.x. x.x. x.x. x.x.", klang="hihat"))
 spur(1, beat("x... x... x... x...", klang="kick"))
 `;
 
-const LEKTION_2_SCHRITT_6 = `# Mein eigener Beat
+const LEKTION_2_SCHRITT_5 = `# Mein eigener Beat
 
 tempo(120)
 
@@ -192,7 +183,6 @@ export const VORLAGEN = {
   'lektion-2-schritt-3': { titel: 'Lektion 2, Schritt 3', code: LEKTION_2_SCHRITT_3 },
   'lektion-2-schritt-4': { titel: 'Lektion 2, Schritt 4', code: LEKTION_2_SCHRITT_4 },
   'lektion-2-schritt-5': { titel: 'Lektion 2, Schritt 5', code: LEKTION_2_SCHRITT_5 },
-  'lektion-2-schritt-6': { titel: 'Lektion 2, Schritt 6', code: LEKTION_2_SCHRITT_6 },
   'lektion-3-schritt-1': { titel: 'Lektion 3, Schritt 1', code: LEKTION_3_SCHRITT_1 },
   'lektion-3-schritt-2': { titel: 'Lektion 3, Schritt 2', code: LEKTION_3_SCHRITT_2 },
   'lektion-3-schritt-3': { titel: 'Lektion 3, Schritt 3', code: LEKTION_3_GROOVE },

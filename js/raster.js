@@ -1,11 +1,13 @@
 // raster.js – Raster zum Anklicken unter dem Textfeld (KONZEPT.md 3.8).
 // Steht der Cursor in einer Zeile mit beat("…") oder melodie("…"), zeigt das Raster genau dieses Muster.
-//   Beat:    eine Reihe Kästchen pro Takt, ein Klick ändert ein Zeichen: . → x → X → o → .
+//   Beat:    eine Reihe Kästchen pro Takt, ein Klick ändert ein Zeichen: . → x → . (ab Stufe 8: . → x → X → o → .)
 //   Melodie: Zeilen = Tonstufen, Spalten = 16 Schritte eines Takts (wie eine „Piano-Roll“).
 //            Klick setzt oder löscht einen Ton, Ziehen nach rechts macht ihn länger.
 // Der Code bleibt die Hauptsache; das Raster schreibt nur in ihn hinein.
 
-const REIHUM = ['.', 'x', 'X', 'o'];
+// Bis Lektion 7 gibt es nur Schlag und Pause. Betonung (X) und Geisterschlag (o) kommen ab Lektion 8.
+const REIHUM_EINFACH = ['.', 'x'];
+const REIHUM_ALLE = ['.', 'x', 'X', 'o'];
 const BEAT_ERLAUBT = /^[.xXo ]*$/;
 const HOECHSTE_STUFE = 14;
 
@@ -186,7 +188,8 @@ export function rasterEinrichten(editor, bereich, stufe, nachAenderung) {
       knopf.addEventListener('mousedown', (e) => e.preventDefault());
       const stelle = position;
       knopf.addEventListener('click', () => {
-        const neu = REIHUM[(REIHUM.indexOf(z) + 1) % REIHUM.length];
+        const reihum = stufe >= 8 ? REIHUM_ALLE : REIHUM_EINFACH;
+        const neu = reihum[(reihum.indexOf(z) + 1) % reihum.length];
         codeErsetzen(stelle, stelle + 1, neu);
       });
       reihe.append(knopf);
