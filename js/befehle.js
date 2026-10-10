@@ -1,9 +1,9 @@
 // befehle.js – die Funktionen, die Kinder in ihrem Code benutzen können.
 // Jeder Befehl prüft seine Angaben und meldet Fehler auf Deutsch mit Zeilenangabe.
 
-import { ausfuehren, fehler, aehnlichstes, Funktion } from './interpreter.js?v=b387a8e';
-import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=b387a8e';
-import { leseTonart, STANDARD_TONART } from './tonart.js?v=b387a8e';
+import { ausfuehren, fehler, aehnlichstes, Funktion } from './interpreter.js?v=c67231f';
+import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=c67231f';
+import { leseTonart, STANDARD_TONART } from './tonart.js?v=c67231f';
 
 const SCHRITTE_PRO_TAKT = 16;
 const MAX_TAKTE = 4;

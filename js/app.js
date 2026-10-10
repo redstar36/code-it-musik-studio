@@ -1,13 +1,13 @@
 // app.js – UI-Logik: Code ausführen, Play/Stop, Meldungen, Live-Steuerung
 
-import { AudioEngine, TAKTE_PRO_TEIL } from './audio-engine.js?v=b387a8e';
-import { programmAusfuehren, liveBefehle, SZENEN_TASTEN, ERSTER_TAKT } from './befehle.js?v=b387a8e';
-import { CodeFehler } from './interpreter.js?v=b387a8e';
-import { DEMO_TRACK } from './vorlagen.js?v=b387a8e';
-import { songBerechnen, takteBerechnen, wavErzeugen, dateiname, herunterladen } from './export.js?v=b387a8e';
-import { codeLaden, codeMerken, codeAlsDatei, dateiLesen } from './speicher.js?v=b387a8e';
-import { linkAuslesen, linkEntfernen, linkFuerCode, stufeAuslesen } from './links.js?v=b387a8e';
-import { rasterEinrichten } from './raster.js?v=b387a8e';
+import { AudioEngine, TAKTE_PRO_TEIL } from './audio-engine.js?v=c67231f';
+import { programmAusfuehren, liveBefehle, SZENEN_TASTEN, ERSTER_TAKT } from './befehle.js?v=c67231f';
+import { CodeFehler } from './interpreter.js?v=c67231f';
+import { DEMO_TRACK } from './vorlagen.js?v=c67231f';
+import { songBerechnen, takteBerechnen, wavErzeugen, dateiname, herunterladen } from './export.js?v=c67231f';
+import { codeLaden, codeMerken, codeAlsDatei, dateiLesen } from './speicher.js?v=c67231f';
+import { linkAuslesen, linkEntfernen, linkFuerCode, stufeAuslesen } from './links.js?v=c67231f';
+import { rasterEinrichten } from './raster.js?v=c67231f';
 
 const engine = new AudioEngine();
 

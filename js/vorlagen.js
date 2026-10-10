@@ -179,6 +179,7 @@ tempo(120)
  */
 export const VORLAGEN = {
   'lektion-1': { titel: 'die Vorlage für Lektion 1', code: DEMO_TRACK },
+  'lektion-1-schritt-0': { titel: 'Lektion 1, Schritt 0', code: DEMO_TRACK },
   'lektion-1-schritt-1': { titel: 'Lektion 1, Schritt 1', code: DEMO_TRACK },
   'lektion-1-schritt-2': { titel: 'Lektion 1, Schritt 2', code: DEMO_TRACK },
   'lektion-1-schritt-3': { titel: 'Lektion 1, Schritt 3', code: DEMO_TRACK },
