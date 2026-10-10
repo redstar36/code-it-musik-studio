@@ -1,8 +1,8 @@
 // audio-engine.js – Lookahead-Scheduler und Klangerzeugung
 // Basiert auf Chris Wilsons "A Tale of Two Clocks"
 
-import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=ec80fa0';
-import { frequenz, STANDARD_TONART } from './tonart.js?v=ec80fa0';
+import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=f646818';
+import { frequenz, STANDARD_TONART } from './tonart.js?v=f646818';
 
 /** Im Song-Modus spielt jeder Eintrag des Ablaufs so viele Takte */
 export const TAKTE_PRO_TEIL = 4;

@@ -3,12 +3,12 @@
 // und mit der normalen Klangmaschine abgespielt wird. „Ins Studio übernehmen“ öffnet das
 // Musik Studio mit genau diesem Code. Live-Spielen, Szenen, Aufnahme und Speichern gibt es nur dort.
 
-import { AudioEngine } from './audio-engine.js?v=ec80fa0';
-import { programmAusfuehren } from './befehle.js?v=ec80fa0';
-import { CodeFehler } from './interpreter.js?v=ec80fa0';
-import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=ec80fa0';
-import { codeLinkFuer, stufeAuslesen } from './links.js?v=ec80fa0';
-import { melodieSchreiben, tonSetzen, tonEntfernenAb } from './raster.js?v=ec80fa0';
+import { AudioEngine } from './audio-engine.js?v=f646818';
+import { programmAusfuehren } from './befehle.js?v=f646818';
+import { CodeFehler } from './interpreter.js?v=f646818';
+import { SCHLAGZEUG, INSTRUMENTE } from './klaenge.js?v=f646818';
+import { codeLinkFuer, stufeAuslesen } from './links.js?v=f646818';
+import { melodieSchreiben, tonSetzen, tonEntfernenAb } from './raster.js?v=f646818';
 
 const SPEICHER = 'musikstudio-werkstatt';
 const GRUNDTOENE = ['c', 'cis', 'd', 'es', 'e', 'f', 'fis', 'g', 'as', 'a', 'b', 'h'];

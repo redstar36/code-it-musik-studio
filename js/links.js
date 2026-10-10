@@ -6,7 +6,7 @@
 //                        Bei ?vorlage=lektion-N… ergibt sich die Stufe N von selbst.
 // Der Teil hinter # wird vom Browser nie an einen Server geschickt – gut für den Datenschutz.
 
-import { VORLAGEN } from './vorlagen.js?v=ec80fa0';
+import { VORLAGEN } from './vorlagen.js?v=f646818';
 
 /** Text → URL-taugliches Base64 (auch Umlaute) */
 function kodieren(text) {
